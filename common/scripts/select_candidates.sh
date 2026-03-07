@@ -10,7 +10,7 @@ prepare_candidate_input() {
   local raw_file="$1"
   local prepared_file="$2"
 
-  python3 - <<'PY' "$raw_file" "$prepared_file" "${NEWS_URL_BLACKLIST_PATTERNS:-}" "${NEWS_SOURCE_BLACKLIST:-}" "${MIN_NEWS_TITLE_LENGTH:-12}" "${NEWS_EXACT_URL_BLACKLIST_PATTERNS:-}" "${HISTORY_FILE:-}" "${HISTORY_LOOKBACK_DAYS:-3}"
+  python3 - <<'PY' "$raw_file" "$prepared_file" "${NEWS_URL_BLACKLIST_PATTERNS:-}" "${NEWS_SOURCE_BLACKLIST:-}" "${MIN_NEWS_TITLE_LENGTH:-12}" "${NEWS_EXACT_URL_BLACKLIST_PATTERNS:-}" "${HISTORY_FILE:-}" "${HISTORY_LOOKBACK_DAYS:-3}" "${NEWS_MAX_AGE_DAYS:-3}"
 import json
 import re
 import sys
@@ -26,6 +26,7 @@ min_title_length = int(sys.argv[5])
 exact_url_blacklist_raw = sys.argv[6]
 history_file_raw = sys.argv[7]
 history_lookback_days = int(sys.argv[8])
+news_max_age_days = int(sys.argv[9])
 
 data = json.loads(raw_file.read_text(encoding="utf-8"))
 results = data.get("results", [])
@@ -52,6 +53,7 @@ stats = {
     "filtered_bad_url": 0,
     "filtered_bad_source": 0,
     "filtered_non_article": 0,
+    "filtered_stale": 0,
     "filtered_duplicate": 0,
     "filtered_history": 0,
 }
@@ -100,6 +102,66 @@ def parse_iso_datetime(value: str):
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
+
+def parse_age_datetime(value: str):
+    raw = (value or "").strip()
+    if not raw:
+        return None
+
+    lower = raw.lower()
+    now = datetime.now(timezone.utc)
+
+    specs = [
+        (r"(\d+)\s*(minute|minutes|min|mins)\s*ago", "minutes"),
+        (r"(\d+)\s*(hour|hours|hr|hrs)\s*ago", "hours"),
+        (r"(\d+)\s*(day|days)\s*ago", "days"),
+        (r"(\d+)\s*(week|weeks)\s*ago", "weeks"),
+        (r"(\d+)\s*(month|months)\s*ago", "months"),
+        (r"(\d+)\s*(year|years)\s*ago", "years"),
+        (r"(\d+)\s*(\u5206\u9418)\s*\u524d", "minutes"),
+        (r"(\d+)\s*(\u5c0f\u6642)\s*\u524d", "hours"),
+        (r"(\d+)\s*(\u5929|\u65e5)\s*\u524d", "days"),
+        (r"(\d+)\s*(\u9031|\u5468)\s*\u524d", "weeks"),
+        (r"(\d+)\s*(\u500b\u6708|\u6708)\s*\u524d", "months"),
+        (r"(\d+)\s*(\u5e74)\s*\u524d", "years"),
+    ]
+    for pat, unit in specs:
+        m = re.search(pat, lower, re.I)
+        if not m:
+            continue
+        n = int(m.group(1))
+        if unit == "minutes":
+            return now - timedelta(minutes=n)
+        if unit == "hours":
+            return now - timedelta(hours=n)
+        if unit == "days":
+            return now - timedelta(days=n)
+        if unit == "weeks":
+            return now - timedelta(weeks=n)
+        if unit == "months":
+            return now - timedelta(days=30 * n)
+        if unit == "years":
+            return now - timedelta(days=365 * n)
+
+    if "yesterday" in lower or "\u6628\u5929" in raw:
+        return now - timedelta(days=1)
+
+    normalized = re.sub(r"[\u5e74\u6708]", "-", raw)
+    normalized = re.sub(r"[\u65e5]", "", normalized)
+    normalized = normalized.replace("/", "-")
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%b %d, %Y", "%B %d, %Y"):
+        try:
+            dt = datetime.strptime(normalized, fmt)
+            if "%H" in fmt:
+                return dt.replace(tzinfo=timezone.utc)
+            return datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+    return parse_iso_datetime(raw)
+
 history_entries = []
 history_file = Path(history_file_raw) if history_file_raw else None
 if history_file and history_file.exists():
@@ -111,6 +173,8 @@ if history_file and history_file.exists():
         history_entries = []
 
 history_cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, history_lookback_days))
+freshness_cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, news_max_age_days))
+current_year = datetime.now(timezone.utc).year
 history_urls = set()
 history_titles = set()
 for entry in history_entries:
@@ -218,6 +282,16 @@ for block in results:
             stats["filtered_non_article"] += 1
             continue
 
+        published_at = parse_age_datetime(age)
+        if published_at and published_at < freshness_cutoff:
+            stats["filtered_stale"] += 1
+            continue
+
+        title_years = [int(y) for y in re.findall(r"(20\d{2})", title)]
+        if title_years and max(title_years) < current_year:
+            stats["filtered_stale"] += 1
+            continue
+
         dedupe_key = (title, normalize_url(url))
         if dedupe_key in seen:
             stats["filtered_duplicate"] += 1
@@ -295,6 +369,21 @@ items = prepared.get("items", [])
 if not isinstance(items, list):
     items = []
 items = items[:max(1, input_limit)]
+slim_items = []
+for x in items:
+    if not isinstance(x, dict):
+        continue
+    title = (x.get("title") or "").strip()
+    url = (x.get("url") or "").strip()
+    if not title or not url:
+        continue
+    slim_items.append({
+        "title": title,
+        "source": (x.get("source") or "").strip(),
+        "url": url,
+        "query": (x.get("query") or "").strip(),
+        "age": (x.get("age") or "").strip(),
+    })
 
 system_prompt = (
     "You are a Traditional Chinese news event clustering assistant. "
@@ -307,7 +396,7 @@ user_payload = {
     "task": "cluster_news_events",
     "program_name": program_name,
     "dedup_strength": strength,
-    "items": items,
+    "items": slim_items,
     "output_schema": {
         "clusters": [
             {
