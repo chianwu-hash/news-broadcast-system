@@ -19,42 +19,24 @@ generate_tts() {
 
   mkdir -p "$(dirname "$VOICE_FILE")"
 
-  local ssml_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_tts.ssml"
-  local tts_timeout="${AZURE_TTS_TIMEOUT:-60}"
+  # ── Step 1：多音字正規化
+  local normalized_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_normalized.txt"
+  python3 "$(dirname "${BASH_SOURCE[0]}")/normalize_tts_text.py" \
+    "$SCRIPT_FILE" "$normalized_file"
 
-  # ── Step 1：文字 → SSML（含多音字 phoneme 標籤）
-  python3 "$(dirname "${BASH_SOURCE[0]}")/text_to_ssml.py" \
-    "$SCRIPT_FILE" \
-    "$ssml_file" \
-    "$TTS_VOICE"
-
-  if [[ ! -f "$ssml_file" || ! -s "$ssml_file" ]]; then
-    die "step=tts ssml generation failed: $ssml_file"
+  if [[ ! -f "$normalized_file" || ! -s "$normalized_file" ]]; then
+    log WARN "step=tts normalize failed, falling back to original script"
+    normalized_file="$SCRIPT_FILE"
   fi
 
-  # ── Step 2：SSML → Azure TTS → voice.mp3
-  local azure_endpoint="https://${AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
-  local http_code
-
-  http_code="$(curl -sS \
-    -o "$VOICE_FILE" \
-    -w "%{http_code}" \
-    -X POST "$azure_endpoint" \
-    -H "Ocp-Apim-Subscription-Key: $AZURE_SPEECH_KEY" \
-    -H "Content-Type: application/ssml+xml" \
-    -H "X-Microsoft-OutputFormat: audio-24khz-160kbitrate-mono-mp3" \
-    --max-time "$tts_timeout" \
-    --data-binary @"$ssml_file")"
-
-  if [[ "$http_code" != "200" ]]; then
-    # 印出錯誤回應內容輔助診斷
-    local err_body=""
-    err_body=$(cat "$VOICE_FILE" 2>/dev/null || true)
-    die "step=tts azure api failed http=$http_code body=${err_body:0:200}"
-  fi
+  # ── Step 2：edge-tts 語音合成
+  "${EDGE_TTS_PYTHON:-python3}" -m "${EDGE_TTS_MODULE:-edge_tts}" \
+    --voice "$TTS_VOICE" \
+    --file "$normalized_file" \
+    --write-media "$VOICE_FILE"
 
   if [[ ! -f "$VOICE_FILE" || ! -s "$VOICE_FILE" ]]; then
-    die "step=tts voice file not generated: $VOICE_FILE"
+    die "tts failed: voice file not generated: $VOICE_FILE"
   fi
 
   local voice_size
