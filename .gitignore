@@ -7,3 +7,13 @@ feature-news/output/*.mp3
 morning-news/runs/
 evening-news/runs/
 feature-news/runs/
+
+# runtime outputs
+morning-news/output/
+evening-news/output/
+feature-news/output/
+common/tmp/
+common/logs/
+morning-news/logs/
+evening-news/logs/
+feature-news/logs/
