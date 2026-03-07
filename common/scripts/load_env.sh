@@ -38,6 +38,8 @@ required_common_vars=(
   TELEGRAM_CHAT_ID
   BASE_DIR
   DEFAULT_TTS_VOICE
+  AZURE_SPEECH_KEY
+  AZURE_SPEECH_REGION
 )
 
 for var in "${required_common_vars[@]}"; do
