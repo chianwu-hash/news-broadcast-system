@@ -257,6 +257,204 @@ prepared_file.write_text(
 PY
 }
 
+
+cluster_events_ai() {
+  local prepared_file="$1"
+  local request_file="$2"
+  local response_file="$3"
+
+  local clustering_enabled="${EVENT_CLUSTERING_ENABLED:-1}"
+  if [[ "$clustering_enabled" != "1" ]]; then
+    log INFO "step=cluster_events_ai skipped EVENT_CLUSTERING_ENABLED=$clustering_enabled"
+    return 0
+  fi
+
+  if [[ ! -f "$prepared_file" || ! -s "$prepared_file" ]]; then
+    log WARN "step=cluster_events_ai skipped prepared file missing: $prepared_file"
+    return 0
+  fi
+
+  local clustering_input_limit="${EVENT_CLUSTERING_INPUT_LIMIT:-60}"
+  local clustering_strength="${EVENT_CLUSTERING_STRENGTH:-medium}"
+  local clustering_timeout="${EVENT_CLUSTERING_TIMEOUT:-120}"
+
+  python3 - <<'PYI' "$prepared_file" "$request_file" "$DEEPSEEK_MODEL" "$clustering_input_limit" "$clustering_strength" "$PROGRAM_NAME"
+import json
+import sys
+from pathlib import Path
+
+prepared_file = Path(sys.argv[1])
+request_file = Path(sys.argv[2])
+model_name = sys.argv[3]
+input_limit = int(sys.argv[4])
+strength = sys.argv[5]
+program_name = sys.argv[6]
+
+prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
+items = prepared.get("items", [])
+if not isinstance(items, list):
+    items = []
+items = items[:max(1, input_limit)]
+
+system_prompt = (
+    "You are a Traditional Chinese news event clustering assistant. "
+    "Cluster the input news items into distinct real-world events. "
+    "Dedup strength is medium: merge same core event across outlets, but keep materially different updates or angles. "
+    "Output JSON only."
+)
+
+user_payload = {
+    "task": "cluster_news_events",
+    "program_name": program_name,
+    "dedup_strength": strength,
+    "items": items,
+    "output_schema": {
+        "clusters": [
+            {
+                "cluster_id": "event-1",
+                "event_summary": "short summary in zh-TW",
+                "representative_index": 0,
+                "member_indices": [0, 3, 7]
+            }
+        ],
+        "deduped_items": [
+            {
+                "title": "headline",
+                "source": "source",
+                "url": "https://example.com",
+                "description": "description",
+                "query": "query",
+                "age": "age"
+            }
+        ]
+    }
+}
+
+payload = {
+    "model": model_name,
+    "temperature": 0.2,
+    "messages": [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
+    ]
+}
+
+request_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+PYI
+
+  local http_code
+  http_code="$(curl -sS \
+    -o "$response_file" \
+    -w "%{http_code}" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+    --max-time "$clustering_timeout" \
+    -d @"$request_file" \
+    "$DEEPSEEK_API_URL")"
+
+  if [[ "$http_code" != "200" ]]; then
+    log WARN "step=cluster_events_ai fallback reason=http_code_$http_code"
+    return 0
+  fi
+
+  local cluster_result
+  if ! cluster_result="$(python3 - <<'PYO' "$response_file" "$prepared_file" "$clustering_input_limit"
+import json
+import re
+import sys
+from pathlib import Path
+
+response_file = Path(sys.argv[1])
+prepared_file = Path(sys.argv[2])
+input_limit = int(sys.argv[3])
+
+def extract_json_block(text: str):
+    text = (text or "").strip()
+    m = re.search(r"```json\s*(\{.*\})\s*```", text, re.S)
+    if m:
+        return m.group(1)
+    m = re.search(r"(\{.*\})", text, re.S)
+    if m:
+        return m.group(1)
+    return text
+
+def normalize_item(item):
+    if not isinstance(item, dict):
+        return None
+    title = (item.get("title") or "").strip()
+    url = (item.get("url") or "").strip()
+    if not title or not url:
+        return None
+    return {
+        "query": (item.get("query") or "").strip(),
+        "title": title,
+        "description": (item.get("description") or "").strip(),
+        "url": url,
+        "source": (item.get("source") or "").strip(),
+        "age": (item.get("age") or "").strip(),
+    }
+
+prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
+original_items = prepared.get("items", [])
+if not isinstance(original_items, list):
+    original_items = []
+limited_original = original_items[:max(1, input_limit)]
+
+data = json.loads(response_file.read_text(encoding="utf-8"))
+content = data["choices"][0]["message"]["content"]
+parsed = json.loads(extract_json_block(content))
+
+clusters = parsed.get("clusters", [])
+if not isinstance(clusters, list):
+    clusters = []
+
+deduped_items = []
+for item in parsed.get("deduped_items", []):
+    normalized = normalize_item(item)
+    if normalized:
+        deduped_items.append(normalized)
+
+if not deduped_items and clusters:
+    seen_idx = set()
+    for c in clusters:
+        if not isinstance(c, dict):
+            continue
+        idx = c.get("representative_index")
+        if not isinstance(idx, int):
+            continue
+        if idx < 0 or idx >= len(limited_original) or idx in seen_idx:
+            continue
+        normalized = normalize_item(limited_original[idx])
+        if normalized:
+            deduped_items.append(normalized)
+            seen_idx.add(idx)
+
+if not deduped_items:
+    raise ValueError("no usable deduped_items from clustering response")
+
+before_count = len(original_items)
+after_count = len(deduped_items)
+prepared["items"] = deduped_items
+prepared["item_count"] = after_count
+prepared["clusters"] = clusters
+prepared["cluster_stats"] = {
+    "before_count": before_count,
+    "after_count": after_count,
+    "cluster_count": len(clusters),
+    "merged_count": max(0, before_count - after_count),
+}
+
+prepared_file.write_text(json.dumps(prepared, ensure_ascii=False, indent=2), encoding="utf-8")
+print(f"before={before_count} after={after_count} clusters={len(clusters)}")
+PYO
+  )"; then
+    log WARN "step=cluster_events_ai fallback reason=parse_or_validation_failed"
+    return 0
+  fi
+
+  log INFO "step=cluster_events_ai done $cluster_result"
+}
+
 select_candidates() {
   log INFO "step=select_candidates start"
 
@@ -272,6 +470,8 @@ select_candidates() {
   local prepared_file="$OUTPUT_DIR/prepared_search_items.json"
   local request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_candidate_request.json"
   local response_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_candidate_response.json"
+  local cluster_request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_cluster_request.json"
+  local cluster_response_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_cluster_response.json"
 
   if [[ ! -f "$raw_file" ]]; then
     die "raw search file not found: $raw_file"
@@ -283,7 +483,9 @@ select_candidates() {
     die "prepared search items file not generated: $prepared_file"
   fi
 
-  python3 - <<'PY' "$prepared_file" "$request_file" "$CANDIDATE_COUNT" "$PROGRAM_NAME" "$SCRIPT_TARGET_CHARS" "$DEEPSEEK_MODEL"
+  cluster_events_ai "$prepared_file" "$cluster_request_file" "$cluster_response_file"
+
+  python3 - <<'PY' "$prepared_file" "$request_file" "$CANDIDATE_COUNT" "$PROGRAM_NAME" "$SCRIPT_TARGET_CHARS" "$DEEPSEEK_MODEL" "${EVENT_CLUSTERING_INPUT_LIMIT:-60}"
 import json
 import sys
 from pathlib import Path
@@ -294,11 +496,12 @@ candidate_count = int(sys.argv[3])
 program_name = sys.argv[4]
 script_target_chars = sys.argv[5]
 model_name = sys.argv[6]
+input_limit = int(sys.argv[7])
 
 prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
 items = prepared.get("items", [])
 
-items = items[:60]
+items = items[:max(1, input_limit)]
 
 system_prompt = f"""你是台灣繁體中文新聞編輯。
 你的工作是根據搜尋結果，初選出最適合做成 {program_name} 的候選新聞。
