@@ -1,0 +1,9 @@
+.env
+*.log
+common/tmp/
+morning-news/output/*.mp3
+evening-news/output/*.mp3
+feature-news/output/*.mp3
+morning-news/runs/
+evening-news/runs/
+feature-news/runs/

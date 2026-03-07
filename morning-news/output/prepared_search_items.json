@@ -1,0 +1,224 @@
+{
+  "program_name": "morning-news",
+  "generated_at": "2026-03-07T15:47:28.693649+08:00",
+  "item_count": 26,
+  "filter_stats": {
+    "raw_count": 60,
+    "kept_count": 26,
+    "filtered_short_title": 8,
+    "filtered_bad_url": 14,
+    "filtered_bad_source": 2,
+    "filtered_non_article": 5,
+    "filtered_duplicate": 5
+  },
+  "items": [
+    {
+      "query": "台灣 即時新聞",
+      "title": "經典賽》台灣隊戰強投山本由伸 吳復連：積極揮棒就對了 - 自由體育",
+      "description": "體育 〉 即時新聞 · 2026/03/06 19:07 · 前職棒選手吳復連參加彰化縣政府的台日大賽應援場，全力為台灣隊加油。（記者劉曉欣攝） ·",
+      "url": "https://sports.ltn.com.tw/news/breakingnews/5361494",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 即時新聞",
+      "title": "經典賽桃園直播現場「台灣加油」聲不斷 氣氛HIGH到最高點 - 自由體育",
+      "description": "體育 〉 即時新聞 · 2026/03/06 18:54 · 2026 經典賽，台灣VS日本，桃園市政府在市府廣場架起500吋螢幕，為台灣加油、打氣。（記者謝武雄攝） · 〔記者謝武雄／桃園報導〕2026 經典賽，桃園直播現場「台灣加油」聲不斷，氣氛HIGH到最高點 ·",
+      "url": "https://sports.ltn.com.tw/news/breakingnews/5361479",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 即時新聞",
+      "title": "WBC經典賽／台日大戰中華隊0：13七局扣倒結束⋯打擊失靈、致命傷2局大谷翔平滿貫砲「戰捷克不能輸」 - 今周刊",
+      "description": "台灣隊週四(3/5)上午11點首戰迎戰澳洲隊，先發陣容公布！先發投手人選由「龍之子」徐若熙扛起重任。先發打線名單也公告，由於李灝宇傷退，由林子偉守二壘、江坤宇鎮守游擊大關。澳洲隊則推出具大聯盟資歷的左投A.威爾斯（Alex Wells）先發。最終台灣澳洲比分為0:3。",
+      "url": "https://www.businesstoday.com.tw/article/category/183027/post/202603050003/",
+      "source": "Business Today",
+      "age": "18 hours ago"
+    },
+    {
+      "query": "台灣 即時新聞",
+      "title": "Team台灣棒球！ 鴻海砸1200萬送200人赴東京巨蛋熱血應援",
+      "description": "即時新聞 · 健工創辦人噴24萬看WBC被詐騙！乾站場外 網紅孫女求票送進場2026.03.06 21:36 · 伊朗女子學校遭空襲 美調查初判美軍可能涉案2026.03.06 21:12 · 小孩安靜就出事！ 全職媽邊工作邊育兒「4歲兒跌入洗衣機溺斃」2026.03.06 20:40 · 台日經典賽／大谷翔平滿貫轟、安打震撼教育 台灣隊0：13遭扣倒2026.03.06 20:20 ·",
+      "url": "https://www.mnews.tw/story/mm-20260306fin010",
+      "source": "Mnews",
+      "age": "18 hours ago"
+    },
+    {
+      "query": "台灣 即時新聞",
+      "title": "【即時文字轉播】WBC台灣 vs 日本戰報：中華隊不敵日本強勁打線攻勢串聯，遭13：0扣倒提前結束台日大戰 - TNL The News Lens 關鍵評論網",
+      "description": "世界棒球經典賽，台灣隊對陣地主日本隊。日本隊最終由13:0提前結束比賽，靠著二局上半大谷翔平的滿貫全壘打開啟10分大局、三局上日本打線串連再度攻下3分。",
+      "url": "https://www.thenewslens.com/article/265401",
+      "source": "The News Lens",
+      "age": "5 hours ago"
+    },
+    {
+      "query": "台灣 即時新聞",
+      "title": "WBC經典賽圖文直播 台灣隊不敵日本強打連線0比13被扣倒 | 運動 | 中央社 CNA",
+      "description": "（中央社網站6日電）世界棒球經典賽（WBC）台灣隊首戰吞敗，今天迎戰地主日本隊，台灣隊派出投手鄭浩均先發，日本隊先發投手則為強投山本由伸。台灣隊投手群不敵日本隊攻勢，被大谷翔平單場敲3安、包括1發滿貫砲，台灣隊全場僅張育成敲安，團隊吞8K，7局提前結束，終場以0比13、吞下預賽2連敗。",
+      "url": "https://www.cna.com.tw/news/aspt/202603065003.aspx",
+      "source": "CNA",
+      "age": "17 hours ago"
+    },
+    {
+      "query": "台灣 政治 最新",
+      "title": "自由開講》台灣要「三箭齊下」 永保安康 - 自由評論網",
+      "description": "即時 熱門 政治 軍武 社會 生活 健康 國際 地方 蒐奇 財富自由 財經 娛樂 藝文 汽車 時尚 體育 3 C 評論 玩咖 食譜 地產 專區 服務 · 自由電子報 APP 自由電子報粉絲團 自由電子報 Line 自由電子報 X 熱門新訊 ... 賴清德總統近日在總統府接受法新社（AFP）專訪，直指「台海局勢」不僅攸關台灣自身安全，也牽動整個「印太區域的戰略平衡」。如果台灣被中國併吞，下一個受威脅的將是日本、菲律賓。對此，筆者認為台灣要「三箭齊下」，才能讓台灣安全，「印太區域」安穩，全世界安泰！賴清德總統日前接受法新社專訪時表示，台灣不可能是任何一個國家的籌碼，前途只有台灣人民可以決定，台灣對自己有信心。（法新社）",
+      "url": "https://talk.ltn.com.tw/article/breakingnews/5350236",
+      "source": "Ltn",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 政治 最新",
+      "title": "吃裡扒外？自稱「前台灣隊職員」助澳洲情蒐還炫耀 運動部回應了 | 生活 | Newtalk新聞",
+      "description": "政治 最新台南市長民調陷拉鋸！ 謝龍介只輸5％、賴清德成關鍵 · 國際 先專注推翻伊朗？ 川普被問到油價大漲：那就漲吧 · 政治 從美國反觀台灣！謝金河：有人聽命於想毀台的國家天天拿刀捅自己",
+      "url": "https://newtalk.tw/news/view/2026-03-06/1022919",
+      "source": "Newtalk",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 政治 最新",
+      "title": "2026WBC經典賽》台灣對日本13：0慘遭「扣倒」血洗，大谷翔平痛擊台灣苦吞二連敗 | 遠見雜誌",
+      "description": "最新文章 最新文章 · 話題 · 政治 時事 人物 總經 · 國際 · 全球焦點 兩岸 · AI · 工具教學 時事新知 名家專欄 大師觀點 企業案例 · 金融 · 投資理財 保險規劃 退休理財 金融Fintech 房地產 · 科技 · 趨勢焦點 半導體 電腦周邊 軟體服務 ·",
+      "url": "https://www.gvm.com.tw/article/128543",
+      "source": "GVM",
+      "age": "19 hours ago"
+    },
+    {
+      "query": "台灣 政治 最新",
+      "title": "經典賽》台灣隊提前在7局被扣倒 隊史第3次 - 自由體育",
+      "description": "即時 熱門 政治 軍武 社會 生活 健康 國際 地方 蒐奇 財富自由 財經 娛樂 藝文 汽車 時尚 體育 3 C 評論 玩咖 食譜 地產 專區 服務 · 自由電子報 APP 自由電子報粉絲團 自由電子報 Line 自由電子報 X 熱門新訊 ... 〔記者徐正揚／台北報導〕台灣隊今天在2026年經典賽Ｃ組預賽打出隊史最慘一役，2局上被大谷翔平轟出滿貫彈後單局狂丟10分，讓日本隊才打2局就取得扣倒對手的基本額度，最終以0：13提前在7局被日本扣倒，不僅是隊史第3次被扣倒，也是相隔20年再被日本扣倒。",
+      "url": "https://sports.ltn.com.tw/news/breakingnews/5361592",
+      "source": "LTN",
+      "age": "19 hours ago"
+    },
+    {
+      "query": "台灣 政治 最新",
+      "title": "經典賽》台灣小心！捷克一路緊咬 澳洲贏得驚險 - 自由體育",
+      "description": "即時 熱門 政治 軍武 社會 生活 健康 國際 地方 蒐奇 財富自由 財經 娛樂 藝文 汽車 時尚 體育 3 C 評論 玩咖 食譜 地產 專區 服務 · 自由電子報 APP 自由電子報粉絲團 自由電子報 Line 自由電子報 X 熱門新訊 ... 〔特派記者羅志朋／日本東京報導〕澳洲昨天在經典賽開幕戰以3：0完封勝台灣...",
+      "url": "https://sports.ltn.com.tw/news/breakingnews/5361024",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 政治 最新",
+      "title": "WBC台日戰今晚開打！山本由伸預計投3局或50球 日媒搶排先發打線 | 體育 | Newtalk新聞",
+      "description": "(影)《矢板明夫Newtalk》國民黨不滿台積電去美日設廠 所以阻擋軍購作為報復？ 曹興誠痛批「邏輯錯亂」",
+      "url": "https://newtalk.tw/news/view/2026-03-06/1022909",
+      "source": "Newtalk",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 財經 最新",
+      "title": "投信本週天天買前10大賣超出爐！第1大苦主換這檔電子接棒 - 自由財經",
+      "description": "〔財經頻道／綜合報導〕...再是遭連65砍的正新，而是<strong>華通，今出手倒貨2954張霸榜，受投信賣超影響，股價下跌0.98%，收203元，成交量為8.63萬張</strong>。...",
+      "url": "https://ec.ltn.com.tw/article/breakingnews/5361315",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 財經 最新",
+      "title": "7檔飆股今被處置！4檔採每20分鐘撮合一次 要「關」到3月19日 | 財經 | Newtalk新聞",
+      "description": "台股昨（5）日出現強勁反彈，<strong>加權指數最高來到 34,319.68 點，大漲超過千點，但市場追價力道明顯保守，成交量縮減至約 7,617 億元，終場漲勢收斂至 844.06點或 2.57%</strong>。然而，仍有個股因...",
+      "url": "https://newtalk.tw/news/view/2026-03-06/1022929",
+      "source": "Newtalk",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 財經 最新",
+      "title": "美股收盤》中東戰火油價衝高！道瓊跌近800點 台積電ADR收黑 - 自由財經",
+      "description": "〔即時新聞／綜合報導〕週四美國股市短暫上漲後轉跌，投資人對伊朗戰爭的擔憂再度加劇，美國原油價格則突破每桶80美元引發通膨擔憂。道瓊工業指數下跌784.67點、1.61%，標普500指數下跌0.56%，那斯達克指數下跌0.26%，費城半導體指數跌1.17%，台積電ADR跌1%，收在353.86美元。 · 綜合外媒報導，美伊衝突蔓延至更多國家，全球能源要道荷姆茲海峽因飛彈和無人機的威脅，油輪運輸大減，推動美國原油價格上漲約8.5%，至每桶81美元，為2024年7月以來的最高。全球基準布蘭特原油價格上漲4.9%，至每桶85.41美元。市場擔心，長期中斷可能加劇通貨膨脹並減緩經濟成長。",
+      "url": "https://ec.ltn.com.tw/article/breakingnews/5360605",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 財經 最新",
+      "title": "投信連5買最愛72萬存股族！這檔金融本週買超逾13萬張 天天霸榜 - 自由財經",
+      "description": "〔財經頻道／綜合報導〕...本週買超13.29萬張，不過，受到外資反手賣出，<strong>今股價小跌0.61%，收24.4元，成交量縮小到4.78萬張</strong>。...",
+      "url": "https://ec.ltn.com.tw/article/breakingnews/5361328",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 財經 最新",
+      "title": "台股收盤下跌73點收33,599點 台積電收1,890元下跌10元 | 股市要聞 | 股市 | 聯合新聞網",
+      "description": "<strong>台塑（1301）6日宣布，董事會決議配發現金股利每股0.5元</strong>。台塑2025年稅後淨損100.48億元，每股淨損（EPS）1.58元。依6日收盤價50.2元計算，現金殖利率約1%。台塑連續兩年虧損，仍決議發...",
+      "url": "https://udn.com/news/story/7251/9363618",
+      "source": "UDN",
+      "age": "9 hours ago"
+    },
+    {
+      "query": "台灣 財經 最新",
+      "title": "台股狂震像大怒神 專家揭止跌關鍵：大舉抄底時機還沒到 - 財經 - 中時新聞網",
+      "description": "台股近日波動劇烈，4日...終收漲844點，寫下史上第五大漲點，<strong>今（6）日盤勢再度劇烈震盪，盤中震幅超過500點，終場小跌73點作收</strong>，連續幾天的大起大落，讓不少投資人...",
+      "url": "https://www.chinatimes.com/realtimenews/20260306003147-260410",
+      "source": "China Times",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 社會 新聞",
+      "title": "又是毒駕！宜蘭賓士男高速撞死返家女老師 波及7車釀1死3傷 - 社會 - 自由時報電子報",
+      "description": "不用抽 不用搶 現在用APP看新聞 保證天天中獎 點我下載APP 按我看活動辦法 ... 他自爆「出賣台灣隊情報」給澳洲隊網炸鍋 被牽拖的民代急喊「快出面說明」",
+      "url": "https://news.ltn.com.tw/news/society/breakingnews/5360695",
+      "source": "LTN",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 社會 新聞",
+      "title": "撞死熱心女教師！宜蘭23歲毒駕男黑歷史曝 曾涉超商砍人案遭判刑 | 社會 | NOWnews今日新聞",
+      "description": "宜蘭5日晚間發生一起奪命車禍！一名23歲林姓男子疑似毒駕，載著妻子行經行經中山路三段、幸福路口時，撞死一名資深鍾姓女老師，釀成1死3傷的悲劇。如今，林男的黑歷史也曝光，他不僅是毒品列管人口，更曾捲入超商砍人案被判刑1年7月徒刑，現今又再度闖禍奪走一條良師性命，引發社會公憤。",
+      "url": "https://www.nownews.com/news/6792953",
+      "source": "NOWnews",
+      "age": "1 day ago"
+    },
+    {
+      "query": "台灣 社會 新聞",
+      "title": "中國時報 - 中時新聞網",
+      "description": "中央政府總預算至今仍卡關，立法院會6日二讀通過國民黨團、民眾黨團提案，針對總金額新台幣718億元的少子化生育補助、TPASS、治水防洪等38項新興計畫，立院同意行政院先行動支。然而，行政院發言人李慧",
+      "url": "https://www.chinatimes.com/newspapers/2601",
+      "source": "China Times",
+      "age": "11 hours ago"
+    },
+    {
+      "query": "台灣 社會 新聞",
+      "title": "WBC經典賽轉播攻略》中華隊賽程、直播線上看與全台免費戶外應援一次看│TVBS新聞網",
+      "description": "新聞 · 即時 · 熱門 · 社會 · 娛樂 · 政治 · 國際 · 生活 · 健康 · 理財房地產 · Focus · 食尚 · 新奇 · 科技 · 體育 · 大陸 · 氣象 · Taiwan News · 汽車 · ESG永續 · 精選 · Live不漏接 · 議題 · 民調 ·",
+      "url": "https://news.tvbs.com.tw/sports/3139989",
+      "source": "TVBS",
+      "age": "1 day ago"
+    },
+    {
+      "query": "國際新聞 最新 中文",
+      "title": "伊朗戰爭：這場衝突如何動搖中國的雄心 - BBC News 中文",
+      "description": "中國外長王毅表示，美國與以色列對伊朗發動攻擊並「公然擊殺一個主權國家領導人，鼓動政權更迭，不可接受」。 · 實際上，美國1月份在委內瑞拉的行動，以及如今在伊朗的作為，正凸顯了這些國家與中國夥伴關係的局限。",
+      "url": "https://www.bbc.com/zhongwen/articles/c1mjkgzzjm2o/trad.amp",
+      "source": "BBC",
+      "age": "1 day ago"
+    },
+    {
+      "query": "international breaking news",
+      "title": "Iran vows revenge after U.S. sinks warship; foreign minister rejects negotiations",
+      "description": "Follow live updates and the latest news coverage as Iran vows revenge for the U.S. warship sinking, Trump and Israel strike Tehran, and Americans are stranded in the Middle East.",
+      "url": "https://www.nbcnews.com/world/iran/live-blog/live-updates-iran-war-trump-israel-warship-attack-middle-east-rcna261866",
+      "source": "NBC News",
+      "age": "1 day ago"
+    },
+    {
+      "query": "international breaking news",
+      "title": "Reuters Iran War: Latest Breaking News, Updates & Analysis | Reuters",
+      "description": "Real-time Reuters coverage of the Iran war: US-Israel strikes, Iranian retaliation, nuclear threats, oil market shocks, and regional war risks.",
+      "url": "https://www.reuters.com/world/iran/",
+      "source": "Reuters",
+      "age": "1 hour ago"
+    },
+    {
+      "query": "international breaking news",
+      "title": "Iran live updates: Trump says 'no deal with Iran except unconditional surrender' - ABC News",
+      "description": "Asked to explain what the president means when he calls for &quot;unconditional surrender,&quot; White House press secretary Karoline Leavitt told ABC News on Friday that Iran will surrender when Trump &quot;determines that Iran no longer poses a threat to the United States of America and the goals of Operation Epic Fury has been fully realized.&quot;",
+      "url": "https://abcnews.com/International/live-updates/iran-live-updates-idf-targets-iranian-internal-security/?id=130743836",
+      "source": "ABC News",
+      "age": "13 hours ago"
+    }
+  ]
+}

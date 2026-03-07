@@ -1,0 +1,415 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  echo "[ERROR] select_candidates.sh 必須用 source 載入，不能直接執行"
+  exit 1
+fi
+
+prepare_candidate_input() {
+  local raw_file="$1"
+  local prepared_file="$2"
+
+  python3 - <<'PY' "$raw_file" "$prepared_file" "${NEWS_URL_BLACKLIST_PATTERNS:-}" "${NEWS_SOURCE_BLACKLIST:-}" "${MIN_NEWS_TITLE_LENGTH:-12}" "${NEWS_EXACT_URL_BLACKLIST_PATTERNS:-}" "${HISTORY_FILE:-}" "${HISTORY_LOOKBACK_DAYS:-3}"
+import json
+import re
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import urlparse
+
+raw_file = Path(sys.argv[1])
+prepared_file = Path(sys.argv[2])
+url_blacklist_patterns = sys.argv[3]
+source_blacklist_raw = sys.argv[4]
+min_title_length = int(sys.argv[5])
+exact_url_blacklist_raw = sys.argv[6]
+history_file_raw = sys.argv[7]
+history_lookback_days = int(sys.argv[8])
+
+data = json.loads(raw_file.read_text(encoding="utf-8"))
+results = data.get("results", [])
+
+items = []
+seen = set()
+
+url_blacklist_re = re.compile(url_blacklist_patterns, re.I) if url_blacklist_patterns else None
+source_blacklist = {
+    x.strip().lower()
+    for x in source_blacklist_raw.split(",")
+    if x.strip()
+}
+exact_url_blacklist = {
+    x.strip().rstrip("/")
+    for x in exact_url_blacklist_raw.split("|")
+    if x.strip()
+}
+
+stats = {
+    "raw_count": 0,
+    "kept_count": 0,
+    "filtered_short_title": 0,
+    "filtered_bad_url": 0,
+    "filtered_bad_source": 0,
+    "filtered_non_article": 0,
+    "filtered_duplicate": 0,
+    "filtered_history": 0,
+}
+
+def normalize_title(title: str) -> str:
+    t = (title or "").strip().lower()
+    t = re.sub(r"\s+", "", t)
+    t = re.sub(r"[^\w\u4e00-\u9fff]+", "", t)
+    return t
+
+def normalize_url(url: str) -> str:
+    return (url or "").strip().rstrip("/")
+
+def is_bad_url(url: str) -> bool:
+    if not url:
+        return True
+    if not url.startswith("http"):
+        return True
+
+    normalized = normalize_url(url)
+    if normalized in exact_url_blacklist:
+        return True
+
+    if url_blacklist_re and url_blacklist_re.search(url):
+        return True
+
+    return False
+
+def is_bad_source(source: str) -> bool:
+    s = (source or "").strip().lower()
+    if not s:
+        return False
+    return s in source_blacklist
+
+def parse_iso_datetime(value: str):
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+history_entries = []
+history_file = Path(history_file_raw) if history_file_raw else None
+if history_file and history_file.exists():
+    try:
+        loaded = json.loads(history_file.read_text(encoding="utf-8"))
+        if isinstance(loaded, list):
+            history_entries = loaded
+    except Exception:
+        history_entries = []
+
+history_cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, history_lookback_days))
+history_urls = set()
+history_titles = set()
+for entry in history_entries:
+    if not isinstance(entry, dict):
+        continue
+    published_at = parse_iso_datetime(str(entry.get("published_at", "")))
+    if published_at and published_at < history_cutoff:
+        continue
+
+    entry_url = normalize_url(str(entry.get("url_norm") or entry.get("url") or ""))
+    entry_title = normalize_title(str(entry.get("title_norm") or entry.get("title") or ""))
+    if entry_url:
+        history_urls.add(entry_url)
+    if entry_title:
+        history_titles.add(entry_title)
+
+def looks_like_non_article(url: str, title: str, desc: str) -> bool:
+    normalized = normalize_url(url)
+    parsed = urlparse(normalized)
+    path = parsed.path or "/"
+
+    if path in ("", "/"):
+        return True
+
+    bad_path_patterns = [
+        r"^/search/.*",
+        r"^/world/total$",
+        r"^/realtimenews$",
+        r"^/realtimenews/$",
+        r"^/business/?$",
+        r"^/live/?$",
+        r"^/news/?$",
+        r"^/world/?$",
+        r"^/international/?$",
+        r"^/hk/news/index\.html$",
+        r"^/hk/intnews/index\.html$",
+    ]
+    for pat in bad_path_patterns:
+        if re.search(pat, path, re.I):
+            return True
+
+    generic_title_patterns = [
+        r"即時新聞",
+        r"總覽",
+        r"首頁",
+        r"home",
+        r"breaking international news",
+        r"latest news",
+    ]
+    title_lower = (title or "").strip().lower()
+    desc_lower = (desc or "").strip().lower()
+
+    if len(title_lower) < min_title_length:
+        return True
+
+    for pat in generic_title_patterns:
+        if re.search(pat, title, re.I):
+            if len(path.strip("/").split("/")) <= 1:
+                return True
+
+    generic_desc_patterns = [
+        r"find latest news from every corner",
+        r"online source for breaking",
+        r"delivers current national and local news",
+    ]
+    for pat in generic_desc_patterns:
+        if re.search(pat, desc_lower, re.I):
+            return True
+
+    return False
+
+for block in results:
+    query = block.get("query", "")
+    response = block.get("response", {})
+    web = response.get("web", {})
+    web_results = web.get("results", [])
+
+    for r in web_results:
+        stats["raw_count"] += 1
+
+        title = (r.get("title") or "").strip()
+        desc = (r.get("description") or "").strip()
+        url = (r.get("url") or "").strip()
+        age = (r.get("age") or "").strip()
+        profile = r.get("profile") or {}
+        source = (profile.get("name") or "").strip()
+
+        if not title or not url:
+            stats["filtered_bad_url"] += 1
+            continue
+
+        if len(title) < min_title_length:
+            stats["filtered_short_title"] += 1
+            continue
+
+        if is_bad_url(url):
+            stats["filtered_bad_url"] += 1
+            continue
+
+        if is_bad_source(source):
+            stats["filtered_bad_source"] += 1
+            continue
+
+        if looks_like_non_article(url, title, desc):
+            stats["filtered_non_article"] += 1
+            continue
+
+        dedupe_key = (title, normalize_url(url))
+        if dedupe_key in seen:
+            stats["filtered_duplicate"] += 1
+            continue
+
+        url_norm = normalize_url(url)
+        title_norm = normalize_title(title)
+        if (url_norm and url_norm in history_urls) or (title_norm and title_norm in history_titles):
+            stats["filtered_history"] += 1
+            continue
+
+        seen.add(dedupe_key)
+
+        items.append({
+            "query": query,
+            "title": title,
+            "description": desc,
+            "url": url,
+            "source": source,
+            "age": age,
+        })
+
+stats["kept_count"] = len(items)
+
+prepared = {
+    "program_name": data.get("program_name", ""),
+    "generated_at": data.get("generated_at", ""),
+    "item_count": len(items),
+    "filter_stats": stats,
+    "items": items
+}
+
+prepared_file.write_text(
+    json.dumps(prepared, ensure_ascii=False, indent=2),
+    encoding="utf-8"
+)
+PY
+}
+
+select_candidates() {
+  log INFO "step=select_candidates start"
+
+  if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+    die "DEEPSEEK_API_KEY is empty"
+  fi
+
+  if [[ -z "${DEEPSEEK_API_URL:-}" ]]; then
+    die "DEEPSEEK_API_URL is empty"
+  fi
+
+  local raw_file="$OUTPUT_DIR/raw_search_results.json"
+  local prepared_file="$OUTPUT_DIR/prepared_search_items.json"
+  local request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_candidate_request.json"
+  local response_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_candidate_response.json"
+
+  if [[ ! -f "$raw_file" ]]; then
+    die "raw search file not found: $raw_file"
+  fi
+
+  prepare_candidate_input "$raw_file" "$prepared_file"
+
+  if [[ ! -f "$prepared_file" || ! -s "$prepared_file" ]]; then
+    die "prepared search items file not generated: $prepared_file"
+  fi
+
+  python3 - <<'PY' "$prepared_file" "$request_file" "$CANDIDATE_COUNT" "$PROGRAM_NAME" "$SCRIPT_TARGET_CHARS" "$DEEPSEEK_MODEL"
+import json
+import sys
+from pathlib import Path
+
+prepared_file = Path(sys.argv[1])
+request_file = Path(sys.argv[2])
+candidate_count = int(sys.argv[3])
+program_name = sys.argv[4]
+script_target_chars = sys.argv[5]
+model_name = sys.argv[6]
+
+prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
+items = prepared.get("items", [])
+
+items = items[:60]
+
+system_prompt = f"""你是台灣繁體中文新聞編輯。
+你的工作是根據搜尋結果，初選出最適合做成 {program_name} 的候選新聞。
+
+請遵守以下規則：
+1. 使用繁體中文。
+2. 以台灣聽眾的關聯性為優先。
+3. 避免重複主題。
+4. 優先挑選明確、具公共性、具討論價值的新聞。
+5. 不要挑選首頁、分類頁、搜尋頁、評論頁、直播頁、影音頁。
+6. 只輸出 JSON，不要輸出額外說明。
+7. 請選出 {candidate_count} 則候選新聞。
+8. 每則新聞都要包含：
+   - rank
+   - title
+   - source
+   - url
+   - reason
+   - category
+   - region
+"""
+
+user_prompt = {
+    "task": "select_candidate_news",
+    "program_name": program_name,
+    "candidate_count": candidate_count,
+    "script_target_chars": script_target_chars,
+    "items": items,
+    "output_schema": {
+        "candidates": [
+            {
+                "rank": 1,
+                "title": "新聞標題",
+                "source": "媒體名稱",
+                "url": "https://example.com",
+                "reason": "入選原因",
+                "category": "politics/economy/society/world/sports/other",
+                "region": "taiwan/world"
+            }
+        ]
+    }
+}
+
+payload = {
+    "model": model_name,
+    "temperature": 0.3,
+    "messages": [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": json.dumps(user_prompt, ensure_ascii=False)}
+    ]
+}
+
+request_file.write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2),
+    encoding="utf-8"
+)
+PY
+
+  local http_code
+  http_code="$(curl -sS \
+    -o "$response_file" \
+    -w "%{http_code}" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+    --max-time "${DEEPSEEK_TIMEOUT:-120}" \
+    -d @"$request_file" \
+    "$DEEPSEEK_API_URL")"
+
+  if [[ "$http_code" != "200" ]]; then
+    log ERROR "step=select_candidates failed http_code=$http_code"
+    if [[ -f "$response_file" ]]; then
+      log ERROR "step=select_candidates response=$(tr '\n' ' ' < "$response_file" | head -c 800)"
+    fi
+    die "deepseek candidate selection failed"
+  fi
+
+  python3 - <<'PY' "$response_file" "$CANDIDATES_FILE"
+import json
+import re
+import sys
+from pathlib import Path
+
+response_file = Path(sys.argv[1])
+candidates_file = Path(sys.argv[2])
+
+data = json.loads(response_file.read_text(encoding="utf-8"))
+content = data["choices"][0]["message"]["content"].strip()
+
+match = re.search(r"```json\s*(\{.*\})\s*```", content, re.S)
+if match:
+    content = match.group(1)
+else:
+    match = re.search(r"(\{.*\})", content, re.S)
+    if match:
+        content = match.group(1)
+
+parsed = json.loads(content)
+
+candidates_file.write_text(
+    json.dumps(parsed, ensure_ascii=False, indent=2),
+    encoding="utf-8"
+)
+PY
+
+  if [[ ! -f "$CANDIDATES_FILE" || ! -s "$CANDIDATES_FILE" ]]; then
+    die "candidates file not generated: $CANDIDATES_FILE"
+  fi
+
+  local candidate_size
+  candidate_size=$(stat -c%s "$CANDIDATES_FILE" 2>/dev/null || echo 0)
+
+  log INFO "step=select_candidates done candidates_file=$CANDIDATES_FILE size_bytes=$candidate_size"
+}
+

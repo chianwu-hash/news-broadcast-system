@@ -1,0 +1,139 @@
+{
+  "candidates": [
+    {
+      "rank": 1,
+      "title": "WBC經典賽／台日大戰中華隊0：13七局扣倒結束⋯打擊失靈、致命傷2局大谷翔平滿貫砲「戰捷克不能輸」",
+      "source": "Business Today",
+      "url": "https://www.businesstoday.com.tw/article/category/183027/post/202603050003/",
+      "reason": "台灣隊在經典賽遭遇歷史性慘敗，為重大體育事件，具高度公共討論價值與全國關注度。",
+      "category": "sports",
+      "region": "taiwan"
+    },
+    {
+      "rank": 2,
+      "title": "又是毒駕！宜蘭賓士男高速撞死返家女老師 波及7車釀1死3傷",
+      "source": "LTN",
+      "url": "https://news.ltn.com.tw/news/society/breakingnews/5360695",
+      "reason": "毒駕肇事造成無辜教師死亡，屬重大社會公安事件，涉及毒品、交通安全等公共議題，具強烈警示與討論價值。",
+      "category": "society",
+      "region": "taiwan"
+    },
+    {
+      "rank": 3,
+      "title": "投信本週天天買前10大賣超出爐！第1大苦主換這檔電子接棒",
+      "source": "LTN",
+      "url": "https://ec.ltn.com.tw/article/breakingnews/5361315",
+      "reason": "提供台股資金動向關鍵資訊，反映市場主力動態，對廣大投資人具直接參考價值，屬明確財經新聞。",
+      "category": "economy",
+      "region": "taiwan"
+    },
+    {
+      "rank": 4,
+      "title": "美股收盤》中東戰火油價衝高！道瓊跌近800點 台積電ADR收黑",
+      "source": "LTN",
+      "url": "https://ec.ltn.com.tw/article/breakingnews/5360605",
+      "reason": "國際地緣政治衝突（美伊）直接衝擊全球股市與油價，影響台灣經濟與股匯市，具高度關聯性與即時性。",
+      "category": "world",
+      "region": "world"
+    },
+    {
+      "rank": 5,
+      "title": "台股收盤下跌73點收33,599點 台積電收1,890元下跌10元",
+      "source": "UDN",
+      "url": "https://udn.com/news/story/7251/9363618",
+      "reason": "提供台股大盤及權值股台積電最新收盤資訊，是投資人每日關注的基本財經要聞，資訊明確。",
+      "category": "economy",
+      "region": "taiwan"
+    },
+    {
+      "rank": 6,
+      "title": "吃裡扒外？自稱「前台灣隊職員」助澳洲情蒐還炫耀 運動部回應了",
+      "source": "Newtalk",
+      "url": "https://newtalk.tw/news/view/2026-03-06/1022919",
+      "reason": "涉及國家代表隊情報外洩疑雲，屬體育與紀律的爭議事件，具公共性與討論價值。",
+      "category": "sports",
+      "region": "taiwan"
+    },
+    {
+      "rank": 7,
+      "title": "7檔飆股今被處置！4檔採每20分鐘撮合一次 要「關」到3月19日",
+      "source": "Newtalk",
+      "url": "https://newtalk.tw/news/view/2026-03-06/1022929",
+      "reason": "揭露台股監理措施，影響特定股票交易與投資人權益，屬明確的市場監管訊息。",
+      "category": "economy",
+      "region": "taiwan"
+    },
+    {
+      "rank": 8,
+      "title": "撞死熱心女教師！宜蘭23歲毒駕男黑歷史曝 曾涉超商砍人案遭判刑",
+      "source": "NOWnews",
+      "url": "https://www.nownews.com/news/6792953",
+      "reason": "深入追蹤毒駕肇事者背景，凸顯治安與司法累犯問題，延伸社會事件深度，具公共討論空間。",
+      "category": "society",
+      "region": "taiwan"
+    },
+    {
+      "rank": 9,
+      "title": "伊朗戰爭：這場衝突如何動搖中國的雄心",
+      "source": "BBC",
+      "url": "https://www.bbc.com/zhongwen/articles/c1mjkgzzjm2o/trad.amp",
+      "reason": "從國際強權（中國）視角分析中東衝突影響，提供宏觀地緣政治觀點，具深度與國際視野。",
+      "category": "world",
+      "region": "world"
+    },
+    {
+      "rank": 10,
+      "title": "投信連5買最愛72萬存股族！這檔金融本週買超逾13萬張 天天霸榜",
+      "source": "LTN",
+      "url": "https://ec.ltn.com.tw/article/breakingnews/5361328",
+      "reason": "點出投信長期買超標的，尤其與存股族相關，提供市場趨勢與投資策略參考，貼近民眾理財需求。",
+      "category": "economy",
+      "region": "taiwan"
+    },
+    {
+      "rank": 11,
+      "title": "台股狂震像大怒神 專家揭止跌關鍵：大舉抄底時機還沒到",
+      "source": "China Times",
+      "url": "https://www.chinatimes.com/realtimenews/20260306003147-260410",
+      "reason": "分析台股劇烈震盪原因並提供專家看法，回應投資人當前最關心的市場穩定性問題。",
+      "category": "economy",
+      "region": "taiwan"
+    },
+    {
+      "rank": 12,
+      "title": "自由開講》台灣要「三箭齊下」 永保安康",
+      "source": "Ltn",
+      "url": "https://talk.ltn.com.tw/article/breakingnews/5350236",
+      "reason": "以賴清德總統專訪為引，探討台灣安全戰略，屬政治與國防議題的評論，具政策討論價值。",
+      "category": "politics",
+      "region": "taiwan"
+    },
+    {
+      "rank": 13,
+      "title": "Team台灣棒球！ 鴻海砸1200萬送200人赴東京巨蛋熱血應援",
+      "source": "Mnews",
+      "url": "https://www.mnews.tw/story/mm-20260306fin010",
+      "reason": "企業大力支持國家隊的正面新聞，在體育賽事挫敗之際，展現民間凝聚力，具溫馨與鼓勵性質。",
+      "category": "sports",
+      "region": "taiwan"
+    },
+    {
+      "rank": 14,
+      "title": "經典賽》台灣小心！捷克一路緊咬 澳洲贏得驚險",
+      "source": "LTN",
+      "url": "https://sports.ltn.com.tw/news/breakingnews/5361024",
+      "reason": "提供台灣隊下一戰對手（捷克）的戰況分析，屬賽事前瞻資訊，對關心賽事的聽眾具參考價值。",
+      "category": "sports",
+      "region": "taiwan"
+    },
+    {
+      "rank": 15,
+      "title": "Reuters Iran War: Latest Breaking News, Updates & Analysis | Reuters",
+      "source": "Reuters",
+      "url": "https://www.reuters.com/world/iran/",
+      "reason": "來自國際權威通訊社的伊朗戰爭即時動態，提供最前線、全面的國際衝突訊息，影響全球經濟與安全。",
+      "category": "world",
+      "region": "world"
+    }
+  ]
+}
