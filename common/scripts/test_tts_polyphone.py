@@ -1,143 +1,136 @@
 #!/usr/bin/env python3
 """
 多音字 TTS 測試腳本
-策略：用佔位符繞過 edge-tts 的 XML escape，事後注入 phoneme 標籤。
+診斷 edge-tts 對各種 SSML 標籤的支援程度。
 """
 
 import asyncio
-import re
 from pathlib import Path
-from xml.sax.saxutils import escape
 
-# ── 測試文章（含大量多音字）────────────────────────────────────
-TEST_TEXT = """
-今天的頭條新聞，來自全球各地的重要報導。
+OUT_DIR = Path("/home/vboxuser/news-broadcast-system/common/tmp")
+VOICE   = "zh-TW-HsiaoChenNeural"
 
-首先是台灣的政治動態。行政院長在立法院接受質詢時，強調政府正在積極推動能源轉型，
-未來將大幅降低燃煤發電的比重，並以再生能源取而代之。
+TEST_TEXT = (
+    "今天的頭條新聞，來自全球各地的重要報導。"
+    "行政院長強調，政府將積極推動能源轉型，降低燃煤發電的比重。"
+    "以色列與哈瑪斯的衝突仍在持續，聯合國呼籲雙方儘速重啟和談。"
+    "分析師認為，隨著人工智慧需求大增，半導體廠商的獲利將大幅成長。"
+    "台中市一名長者在山中迷路三天後獲救，延長賽中教練表示非常振奮。"
+)
 
-接著看到國際局勢。以色列與哈瑪斯的衝突仍在持續，聯合國秘書長對此表示高度關切，
-呼籲雙方儘速重啟和談，以減少平民的傷亡。以和為貴，才能讓地區恢復和平。
+PLACEHOLDER = "XPHONEME"
 
-在財經方面，台積電今日股價創下近期新高，分析師認為，隨著人工智慧需求大增，
-半導體廠商的獲利將大幅成長。投資人對此普遍表示樂觀，市場情緒明顯好轉。
-
-接下來是社會新聞。台中市政府宣布，市區一處老舊建築因結構問題，
-已強制要求住戶疏散，並責成相關單位儘速拆除，以保障市民安全。
-
-在體育方面，中華職棒今晚的精彩賽事中，味全龍以些微差距擊敗統一獅，
-延長賽中的關鍵打點讓全場觀眾沸騰。教練賽後表示，球員今天的表現令人刮目相看。
-
-最後，今天的好消息。花蓮一名長者在山中迷路三天後，獲救時身體狀況尚稱穩定，
-救難人員表示，長者能夠存活，是一個令人振奮的奇蹟。
-
-以上是今天的新聞摘要，感謝您的收聽，我們明天同一時間再會。
-""".strip()
-
-# ── 已知多音字詞組對照（詞 → 字 → 注音）────────────────────
-POLYPHONE_MAP = {
-    "重要":   {"重": "ㄓㄨㄥˋ"},
-    "比重":   {"重": "ㄓㄨㄥˋ"},
-    "重啟":   {"重": "ㄔㄨㄥˊ"},
-    "強調":   {"強": "ㄑㄧㄤˊ"},
-    "強制":   {"強": "ㄑㄧㄤˊ"},
-    "以和為貴": {"和": "ㄏㄜˊ"},
-    "和談":   {"和": "ㄏㄜˊ"},
-    "和平":   {"和": "ㄏㄜˊ"},
-    "長者":   {"長": "ㄓㄤˇ"},
-    "成長":   {"長": "ㄓㄤˇ"},
-    "延長":   {"長": "ㄔㄤˊ"},
-    "教練":   {"教": "ㄐㄧㄠˋ"},
-    "些微差距": {"差": "ㄔㄚ"},
-    "差距":   {"差": "ㄔㄚ"},
-    "台中":   {"中": "ㄓㄨㄥ"},
-    "中華":   {"中": "ㄓㄨㄥ"},
-}
-
-# 佔位符格式：不含任何 XML 特殊字元，escape 後原樣保留
-PLACEHOLDER_RE = re.compile(r"PHONEME_([A-Za-z0-9]+)_([^_]+)_END")
-
-
-def bopomofo_to_ascii_key(bopo: str) -> str:
-    """把注音轉成純 ASCII key，避免佔位符內含非 ASCII 字元被誤處理。"""
-    return bopo.encode("unicode_escape").decode("ascii").replace("\\", "U")
-
-
-def ascii_key_to_bopomofo(key: str) -> str:
-    return key.replace("U", "\\").encode("ascii").decode("unicode_escape")
-
-
-def inject_placeholders(text: str) -> str:
-    """將已知多音字詞組替換成佔位符（在 escape 之前）。"""
-    # 依詞組長度降序，避免短詞覆蓋長詞
-    for phrase in sorted(POLYPHONE_MAP, key=len, reverse=True):
-        if phrase not in text:
-            continue
-        char_map = POLYPHONE_MAP[phrase]
-        replacement = ""
-        for ch in phrase:
-            if ch in char_map:
-                key = bopomofo_to_ascii_key(char_map[ch])
-                replacement += f"PHONEME_{key}_{ch}_END"
-            else:
-                replacement += ch
-        text = text.replace(phrase, replacement)
-    return text
-
-
-def placeholders_to_phoneme_tags(escaped_text: str) -> str:
-    """escape 後，把佔位符還原成 SSML phoneme 標籤。"""
-    def replacer(m):
-        bopo = ascii_key_to_bopomofo(m.group(1))
-        char = m.group(2)
-        return f'<phoneme alphabet="bopo" ph="{bopo}">{char}</phoneme>'
-    return PLACEHOLDER_RE.sub(replacer, escaped_text)
-
-
-def patch_edge_tts_mkssml():
-    """Monkey-patch edge_tts.communicate.mkssml，在 escape 後注入 phoneme 標籤。"""
+def patch_mkssml(transform_fn):
+    """Monkey-patch edge_tts.communicate.mkssml，在 escape 後套用 transform_fn。"""
     import edge_tts.communicate as ec
-
-    original_mkssml = ec.mkssml
-
-    def patched_mkssml(tc, escaped_text):
+    original = ec.mkssml
+    def patched(tc, escaped_text):
         if isinstance(escaped_text, bytes):
             escaped_text = escaped_text.decode("utf-8")
-        escaped_text = placeholders_to_phoneme_tags(escaped_text)
-        return original_mkssml(tc, escaped_text)
+        escaped_text = transform_fn(escaped_text)
+        return original(tc, escaped_text)
+    ec.mkssml = patched
 
-    ec.mkssml = patched_mkssml
+def restore_mkssml():
+    """還原原始 mkssml（重新 import）。"""
+    import importlib
+    import edge_tts.communicate as ec
+    importlib.reload(ec)
 
 
-async def generate_audio(text: str, output_path: Path, label: str):
+async def test_case(label: str, text: str, output_path: Path, transform_fn=None):
+    """執行單一測試，transform_fn 在 escape 後對 escaped_text 做變換。"""
+    import importlib
+    import edge_tts.communicate as ec
+    importlib.reload(ec)  # 每次重置 patch
+
+    if transform_fn:
+        patch_mkssml(transform_fn)
+
     import edge_tts
-    communicate = edge_tts.Communicate(text, voice="zh-TW-HsiaoChenNeural")
-    await communicate.save(str(output_path))
-    print(f"[{label}] 輸出：{output_path}")
+    importlib.reload(edge_tts)
+
+    try:
+        communicate = edge_tts.Communicate(text, voice=VOICE)
+        await communicate.save(str(output_path))
+        size = output_path.stat().st_size
+        print(f"  ✅ [{label}] 成功 → {output_path.name} ({size} bytes)")
+        return True
+    except Exception as e:
+        print(f"  ❌ [{label}] 失敗：{e}")
+        return False
 
 
 async def main():
-    out_dir = Path("/home/vboxuser/news-broadcast-system/common/tmp")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    plain_out = out_dir / "test_plain.mp3"
-    ssml_out  = out_dir / "test_ssml.mp3"
+    print("=" * 55)
+    print("診斷測試：edge-tts SSML 標籤支援程度")
+    print("=" * 55)
 
-    # ── 1. 純文字版本（原始做法）
-    print("產生純文字版本（原始 edge-tts）...")
-    await generate_audio(TEST_TEXT, plain_out, "plain")
+    # ── Case 1：純文字（baseline）
+    await test_case(
+        "1_plain",
+        TEST_TEXT,
+        OUT_DIR / "test_1_plain.mp3",
+    )
 
-    # ── 2. SSML phoneme 版本
-    print("\n產生 SSML phoneme 版本（佔位符注入）...")
-    patch_edge_tts_mkssml()
-    text_with_placeholders = inject_placeholders(TEST_TEXT)
-    await generate_audio(text_with_placeholders, ssml_out, "ssml")
+    # ── Case 2：注入 <break>（最基本的 SSML，幾乎一定支援）
+    def inject_break(escaped_text: str) -> str:
+        return escaped_text.replace(
+            "重要報導。",
+            '重要報導。<break time="800ms"/>'
+        )
+    await test_case(
+        "2_break_tag",
+        TEST_TEXT,
+        OUT_DIR / "test_2_break.mp3",
+        transform_fn=inject_break,
+    )
 
-    print("\n完成！比較以下兩個檔案：")
-    print(f"  純文字：{plain_out}")
-    print(f"  SSML：  {ssml_out}")
-    print("\n重點聆聽多音字：")
-    print("  重（要/啟）、長（者/延長）、教（練）、和（談）、差（距）")
+    # ── Case 3：phoneme 用拼音（zh-latn-pinyin）
+    def inject_phoneme_pinyin(escaped_text: str) -> str:
+        # 重要 → zhòng yào
+        return escaped_text.replace(
+            "重要",
+            '<phoneme alphabet="zh-latn-pinyin" ph="zhòng yào">重要</phoneme>'
+        )
+    await test_case(
+        "3_phoneme_pinyin",
+        TEST_TEXT,
+        OUT_DIR / "test_3_phoneme_pinyin.mp3",
+        transform_fn=inject_phoneme_pinyin,
+    )
+
+    # ── Case 4：phoneme 用注音（bopo）
+    def inject_phoneme_bopo(escaped_text: str) -> str:
+        return escaped_text.replace(
+            "重要",
+            '<phoneme alphabet="bopo" ph="ㄓㄨㄥˋ ㄧㄠˋ">重要</phoneme>'
+        )
+    await test_case(
+        "4_phoneme_bopo",
+        TEST_TEXT,
+        OUT_DIR / "test_4_phoneme_bopo.mp3",
+        transform_fn=inject_phoneme_bopo,
+    )
+
+    # ── Case 5：<sub> 替換（用同音但無歧義的字替代顯示）
+    def inject_sub(escaped_text: str) -> str:
+        # 直接用文字替換讓 TTS 念替代詞，不依賴 phoneme
+        return escaped_text.replace(
+            "重要",
+            '<sub alias="仲要">重要</sub>'
+        )
+    await test_case(
+        "5_sub_alias",
+        TEST_TEXT,
+        OUT_DIR / "test_5_sub.mp3",
+        transform_fn=inject_sub,
+    )
+
+    print("\n完成！請聆聽各檔案，確認哪些 SSML 標籤有作用。")
+    print(f"輸出目錄：{OUT_DIR}")
 
 
 if __name__ == "__main__":
