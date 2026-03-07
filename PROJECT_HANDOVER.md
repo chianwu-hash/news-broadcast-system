@@ -431,9 +431,8 @@ Known remaining concerns:
 1. some candidate results may still include weak-quality sources
 2. same global event can still appear in multiple selected items
 3. script style is usable, but still somewhat templated
-4. history deduplication has not been fully implemented yet
-5. source quality control still needs stronger refinement
-6. event clustering has not been implemented yet
+4. source quality control still needs stronger refinement
+5. Chinese polyphone mispronunciation in TTS (e.g. 院長、重要、銀行) — fix in progress
 
 ---
 
@@ -453,6 +452,10 @@ The following upgrades were recently completed:
 - Telegram delivery
 - candidate pre-filtering logic
 - filter statistics in prepared news output
+- news freshness filtering (`NEWS_MAX_AGE_DAYS`)
+- history-based deduplication (`HISTORY_LOOKBACK_DAYS`, `history.json`)
+- AI event clustering via DeepSeek (`cluster_events_ai`)
+- Git repository initialized and synced between Windows (local) and VM (remote)
 
 ---
 
@@ -473,31 +476,48 @@ When continuing this project, preserve these principles:
 
 ## 14. Immediate next recommended tasks
 
-The next recommended improvements are:
+### Priority 1 - Chinese polyphone fix (TTS pre-processor)
 
-### Priority 1 - history deduplication
+**Status: in progress**
 
-Add history tracking to avoid repeating the same news across days.
+The TTS (edge-tts, `zh-TW-HsiaoChenNeural`) mispronounces polyphone characters such as:
+- 院長 reads 長 as ㄔㄤˊ instead of ㄓㄤˇ
+- 重要 reads 重 as ㄔㄨㄥˊ instead of ㄓㄨㄥˋ
+- 銀行 reads 行 as ㄒㄧㄥˊ instead of ㄏㄤˊ
 
-Planned file:
+Planned fix: a pre-processor script that runs before edge-tts:
+1. Uses jieba for word segmentation
+2. Uses pypinyin to determine correct reading in context
+3. Replaces polyphone characters with unambiguous homophone substitutes
 
-```text
-morning-news/data/history.json
-```
+Example substitutions:
+- 院長 → 院掌 (掌 only reads ㄓㄤˇ)
+- 重要 → 仲要 (仲 only reads ㄓㄨㄥˋ)
+- 銀行 → 銀航 (航 only reads ㄏㄤˊ)
 
-### Priority 2 - event clustering
+Planned file: common/scripts/normalize_tts_text.py
+Called inside generate_tts.sh before the edge-tts call.
 
-Prevent selecting multiple articles about the same major event.
+Polyphone reference sources:
+- pypinyin + jieba (already installed on VM)
+- MoE 教育部重編國語辭典 open data (most authoritative for zh-TW)
+- mozillazg/phrase-pinyin-data (source data used by pypinyin)
 
-### Priority 3 - stronger source quality control
+IMPORTANT: generate_tts.sh currently uses Azure TTS REST API.
+It must be reverted to edge-tts before the polyphone pre-processor is added.
+The Azure TTS key/region remain in .env and load_env.sh for potential future use.
+
+---
+
+### Priority 2 - stronger source quality control
 
 Improve source allow/deny logic and reduce low-value aggregated pages.
 
-### Priority 4 - style refinement
+### Priority 3 - style refinement
 
 Make the generated script sound more natural and less templated.
 
-### Priority 5 - extend the same architecture to:
+### Priority 4 - extend the same architecture to:
 
 - evening-news
 - feature-news
@@ -522,13 +542,39 @@ Suggested editing style:
 
 ---
 
-## 16. Current handover note
+## 16. Development environment
 
-This project is now being continued inside Cursor.
+- VM (VirtualBox): vboxuser@192.168.50.138
+- VM project root: /home/vboxuser/news-broadcast-system
+- Windows local: e:\shared\news-broadcast-system
+- Git remote: vboxuser@192.168.50.138:/home/vboxuser/news-broadcast-system
+- Git push to VM: receive.denyCurrentBranch=updateInstead (already configured)
+- Workflow: edit on Windows, git push to VM, run scripts on VM
 
-The human user has already:
+---
 
-1. handed all relevant files into Cursor
-2. opened the project directory in Cursor
+## 17. TTS investigation summary (2026-03)
 
-Development should continue there using this handover as the primary project context.
+### edge-tts (current, to be kept)
+
+- Free, uses Microsoft Edge browser read-aloud endpoint
+- Does NOT support any SSML tags — phoneme, break, prosody all return NoAudioReceived
+- Known polyphone mispronunciations: 院長、重要、重啟、銀行 etc.
+
+### Azure TTS (tested, credentials stored, NOT used in production)
+
+- REST API endpoint: https://{AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1
+- Credentials: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION in .env
+- Supports break and prosody tags; does NOT support phoneme for zh-TW voices
+- Voice quality similar to edge-tts; free tier 500k chars/month
+- generate_tts.sh was temporarily rewritten for Azure — must be reverted to edge-tts
+- text_to_ssml.py was added for Azure SSML generation — can be removed or kept for reference
+
+### Polyphone fix plan (next task)
+
+- Approach: plain text substitution before edge-tts
+- Replace polyphone characters with unambiguous homophones in the same word context
+- Example: 院長→院掌, 重要→仲要, 銀行→銀航
+- Implementation: common/scripts/normalize_tts_text.py
+- Method: jieba word segmentation + pypinyin context-aware pinyin → auto-detect and substitute
+- Both jieba and pypinyin are already installed on VM
