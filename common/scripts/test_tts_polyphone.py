@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """
 多音字 TTS 測試腳本
-測試目標：比較「純文字」vs「pypinyin SSML 前處理」的發音差異
+策略：用佔位符繞過 edge-tts 的 XML escape，事後注入 phoneme 標籤。
 """
 
 import asyncio
 import re
-import sys
 from pathlib import Path
-
-import jieba
-from pypinyin import Style, lazy_pinyin, pinyin
+from xml.sax.saxutils import escape
 
 # ── 測試文章（含大量多音字）────────────────────────────────────
 TEST_TEXT = """
@@ -37,84 +34,86 @@ TEST_TEXT = """
 以上是今天的新聞摘要，感謝您的收聽，我們明天同一時間再會。
 """.strip()
 
-# ── 已知多音字對照表（依新聞語境強制指定注音）────────────────
-POLYPHONE_BOPOMOFO = {
-    "重要": {"重": "ㄓㄨㄥˋ"},
-    "重啟": {"重": "ㄔㄨㄥˊ"},
-    "比重": {"重": "ㄓㄨㄥˋ"},
-    "大幅": {"大": "ㄉㄚˋ"},
-    "強調": {"強": "ㄑㄧㄤˊ"},
-    "強制": {"強": "ㄑㄧㄤˊ"},
-    "以色列": {"以": "ㄧˇ"},
-    "以和為貴": {"以": "ㄧˇ", "和": "ㄏㄜˊ"},
-    "和談": {"和": "ㄏㄜˊ"},
-    "和平": {"和": "ㄏㄜˊ"},
-    "長者": {"長": "ㄓㄤˇ"},
-    "成長": {"長": "ㄓㄤˇ"},
-    "延長": {"長": "ㄔㄤˊ"},
-    "教練": {"教": "ㄐㄧㄠˋ"},
-    "差距": {"差": "ㄔㄚ"},
-    "差異": {"差": "ㄔㄚ"},
+# ── 已知多音字詞組對照（詞 → 字 → 注音）────────────────────
+POLYPHONE_MAP = {
+    "重要":   {"重": "ㄓㄨㄥˋ"},
+    "比重":   {"重": "ㄓㄨㄥˋ"},
+    "重啟":   {"重": "ㄔㄨㄥˊ"},
+    "強調":   {"強": "ㄑㄧㄤˊ"},
+    "強制":   {"強": "ㄑㄧㄤˊ"},
+    "以和為貴": {"和": "ㄏㄜˊ"},
+    "和談":   {"和": "ㄏㄜˊ"},
+    "和平":   {"和": "ㄏㄜˊ"},
+    "長者":   {"長": "ㄓㄤˇ"},
+    "成長":   {"長": "ㄓㄤˇ"},
+    "延長":   {"長": "ㄔㄤˊ"},
+    "教練":   {"教": "ㄐㄧㄠˋ"},
     "些微差距": {"差": "ㄔㄚ"},
-    "分析師": {"分": "ㄈㄣ"},
-    "積極": {"積": "ㄐㄧ"},
-    "獲利": {"利": "ㄌㄧˋ"},
-    "中華": {"中": "ㄓㄨㄥ"},
-    "台中": {"中": "ㄓㄨㄥ"},
-    "市中": {"中": "ㄓㄨㄥ"},
+    "差距":   {"差": "ㄔㄚ"},
+    "台中":   {"中": "ㄓㄨㄥ"},
+    "中華":   {"中": "ㄓㄨㄥ"},
 }
 
+# 佔位符格式：不含任何 XML 特殊字元，escape 後原樣保留
+PLACEHOLDER_RE = re.compile(r"PHONEME_([A-Za-z0-9]+)_([^_]+)_END")
 
-def char_to_ssml_phoneme(char: str, bopomofo: str) -> str:
-    return f'<phoneme alphabet="bopo" ph="{bopomofo}">{char}</phoneme>'
+
+def bopomofo_to_ascii_key(bopo: str) -> str:
+    """把注音轉成純 ASCII key，避免佔位符內含非 ASCII 字元被誤處理。"""
+    return bopo.encode("unicode_escape").decode("ascii").replace("\\", "U")
 
 
-def text_to_ssml(text: str) -> str:
-    """
-    使用 pypinyin + jieba 將文字轉成 SSML。
-    針對已知多音字詞組，強制替換為正確注音的 phoneme 標籤。
-    """
-    result = text
+def ascii_key_to_bopomofo(key: str) -> str:
+    return key.replace("U", "\\").encode("ascii").decode("unicode_escape")
 
-    # 依詞組長度降序排列，避免短詞干擾長詞替換
-    sorted_phrases = sorted(POLYPHONE_BOPOMOFO.keys(), key=len, reverse=True)
 
-    for phrase in sorted_phrases:
-        char_map = POLYPHONE_BOPOMOFO[phrase]
-        if phrase not in result:
+def inject_placeholders(text: str) -> str:
+    """將已知多音字詞組替換成佔位符（在 escape 之前）。"""
+    # 依詞組長度降序，避免短詞覆蓋長詞
+    for phrase in sorted(POLYPHONE_MAP, key=len, reverse=True):
+        if phrase not in text:
             continue
-
+        char_map = POLYPHONE_MAP[phrase]
         replacement = ""
         for ch in phrase:
             if ch in char_map:
-                replacement += char_to_ssml_phoneme(ch, char_map[ch])
+                key = bopomofo_to_ascii_key(char_map[ch])
+                replacement += f"PHONEME_{key}_{ch}_END"
             else:
                 replacement += ch
-
-        result = result.replace(phrase, replacement)
-
-    ssml = f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-TW">
-  <voice name="zh-TW-HsiaoChenNeural">
-    {result}
-  </voice>
-</speak>"""
-    return ssml
+        text = text.replace(phrase, replacement)
+    return text
 
 
-async def generate_audio_plain(text: str, output_path: Path):
-    """純文字模式（目前系統使用的方式）"""
+def placeholders_to_phoneme_tags(escaped_text: str) -> str:
+    """escape 後，把佔位符還原成 SSML phoneme 標籤。"""
+    def replacer(m):
+        bopo = ascii_key_to_bopomofo(m.group(1))
+        char = m.group(2)
+        return f'<phoneme alphabet="bopo" ph="{bopo}">{char}</phoneme>'
+    return PLACEHOLDER_RE.sub(replacer, escaped_text)
+
+
+def patch_edge_tts_mkssml():
+    """Monkey-patch edge_tts.communicate.mkssml，在 escape 後注入 phoneme 標籤。"""
+    import edge_tts.communicate as ec
+
+    original_mkssml = ec.mkssml
+
+    def patched_mkssml(tc, escaped_text):
+        if isinstance(escaped_text, bytes):
+            escaped_text = escaped_text.decode("utf-8")
+        escaped_text = placeholders_to_phoneme_tags(escaped_text)
+        return original_mkssml(tc, escaped_text)
+
+    ec.mkssml = patched_mkssml
+
+
+async def generate_audio(text: str, output_path: Path, label: str):
     import edge_tts
     communicate = edge_tts.Communicate(text, voice="zh-TW-HsiaoChenNeural")
     await communicate.save(str(output_path))
-    print(f"[plain]  輸出：{output_path}")
-
-
-async def generate_audio_ssml(ssml: str, output_path: Path):
-    """SSML 模式（pypinyin 前處理）"""
-    import edge_tts
-    communicate = edge_tts.Communicate(ssml, voice="zh-TW-HsiaoChenNeural")
-    await communicate.save(str(output_path))
-    print(f"[ssml]   輸出：{output_path}")
+    print(f"[{label}] 輸出：{output_path}")
 
 
 async def main():
@@ -123,24 +122,22 @@ async def main():
 
     plain_out = out_dir / "test_plain.mp3"
     ssml_out  = out_dir / "test_ssml.mp3"
-    ssml_file = out_dir / "test_ssml.xml"
 
-    ssml = text_to_ssml(TEST_TEXT)
-    ssml_file.write_text(ssml, encoding="utf-8")
-    print(f"[ssml]   SSML 已寫入：{ssml_file}")
+    # ── 1. 純文字版本（原始做法）
+    print("產生純文字版本（原始 edge-tts）...")
+    await generate_audio(TEST_TEXT, plain_out, "plain")
 
-    print("\n產生純文字版本（原始 edge-tts）...")
-    await generate_audio_plain(TEST_TEXT, plain_out)
+    # ── 2. SSML phoneme 版本
+    print("\n產生 SSML phoneme 版本（佔位符注入）...")
+    patch_edge_tts_mkssml()
+    text_with_placeholders = inject_placeholders(TEST_TEXT)
+    await generate_audio(text_with_placeholders, ssml_out, "ssml")
 
-    print("\n產生 SSML 版本（pypinyin 前處理）...")
-    await generate_audio_ssml(ssml, ssml_out)
-
-    print("\n完成！請比較以下兩個檔案：")
-    print(f"  純文字版：{plain_out}")
-    print(f"  SSML 版：{ssml_out}")
-    print(f"\n測試文章中的主要多音字：")
-    print("  重（ㄓㄨㄥˋ/ㄔㄨㄥˊ）、長（ㄓㄤˇ/ㄔㄨㄤˊ）、教（ㄐㄧㄠˋ/ㄐㄧㄠ）")
-    print("  和（ㄏㄜˊ/ㄏㄢˋ）、中（ㄓㄨㄥ/ㄓㄨㄥˋ）、強（ㄑㄧㄤˊ/ㄑㄧㄤˇ）")
+    print("\n完成！比較以下兩個檔案：")
+    print(f"  純文字：{plain_out}")
+    print(f"  SSML：  {ssml_out}")
+    print("\n重點聆聽多音字：")
+    print("  重（要/啟）、長（者/延長）、教（練）、和（談）、差（距）")
 
 
 if __name__ == "__main__":
