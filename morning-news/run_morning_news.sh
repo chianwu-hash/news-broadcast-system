@@ -10,6 +10,22 @@ source /home/vboxuser/news-broadcast-system/common/scripts/generate_tts.sh
 source /home/vboxuser/news-broadcast-system/common/scripts/mix_audio.sh
 source /home/vboxuser/news-broadcast-system/common/scripts/send_telegram.sh
 
+DOCTOR_SCRIPT="/home/vboxuser/news-broadcast-system/common/scripts/doctor.sh"
+
+if [[ "${SKIP_DOCTOR:-0}" != "1" ]]; then
+  log INFO "preflight=doctor start script=$DOCTOR_SCRIPT"
+  if [[ ! -x "$DOCTOR_SCRIPT" ]]; then
+    die "doctor script not executable: $DOCTOR_SCRIPT"
+  fi
+  if ! "$DOCTOR_SCRIPT"; then
+    die "doctor check failed"
+  fi
+  log INFO "preflight=doctor done"
+else
+  log INFO "preflight=doctor skipped by SKIP_DOCTOR=1"
+fi
+
+
 LOCK_FILE="/tmp/news_broadcast_morning.lock"
 
 exec 9>"$LOCK_FILE"
