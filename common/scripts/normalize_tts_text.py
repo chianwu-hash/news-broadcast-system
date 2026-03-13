@@ -14,6 +14,7 @@ normalize_tts_text.py
 import re
 import sys
 from pathlib import Path
+import json
 
 import jieba
 from pypinyin import Style, pinyin
@@ -66,7 +67,6 @@ WORD_OVERRIDES: list[tuple[str, str]] = [
     ("生長", "生掌"),
     # 長（ㄔㄤˊ）
     ("延長", "延腸"),
-    ("增長", "增腸"),
     ("加長", "加腸"),
     # 強（ㄑㄧㄤˊ）
     ("強調", "牆調"),
@@ -137,6 +137,29 @@ CHAR_SUBSTITUTE: dict[tuple[str, str], str] = {
 POLYPHONE_CHARS = {ch for (ch, _) in CHAR_SUBSTITUTE}
 
 
+def load_user_corrections(script_dir: Path) -> list[dict]:
+    """載入用戶自訂多音字替換規則"""
+    corrections_file = script_dir / ".." / ".." / "common" / "config" / "tts_user_corrections.json"
+    corrections_file = corrections_file.resolve()
+    if not corrections_file.exists():
+        return []
+    try:
+        data = json.loads(corrections_file.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def apply_user_corrections(text: str, corrections: list[dict]) -> str:
+    """Layer 0：套用用戶自訂替換規則（詞級，優先於其他層）"""
+    for rule in corrections:
+        from_str = (rule.get("from") or "").strip()
+        to_str = (rule.get("to") or "").strip()
+        if from_str and to_str and from_str in text:
+            text = text.replace(from_str, to_str)
+    return text
+
+
 def apply_word_overrides(text: str) -> str:
     """Layer 1：依詞組長度降序替換，避免短詞覆蓋長詞。"""
     for src, dst in sorted(WORD_OVERRIDES, key=lambda x: len(x[0]), reverse=True):
@@ -163,6 +186,9 @@ def apply_char_normalize(text: str) -> str:
 
 
 def normalize(text: str) -> str:
+    script_dir = Path(__file__).parent
+    user_corrections = load_user_corrections(script_dir)
+    text = apply_user_corrections(text, user_corrections)
     text = apply_word_overrides(text)
     text = apply_char_normalize(text)
     return text

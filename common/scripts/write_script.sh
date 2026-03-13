@@ -29,8 +29,39 @@ write_script() {
 
   local request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_request.json"
   local response_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_response.json"
+  local style_name=""
+  local taiwan_count=""
+  local world_count=""
+  local script_tone=""
 
-  python3 - <<'PY' "$CANDIDATES_FILE" "$request_file" "$DEEPSEEK_MODEL" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$MORNING_STYLE_NAME" "$MORNING_TAIWAN_NEWS_COUNT" "$MORNING_WORLD_NEWS_COUNT" "$MORNING_SCRIPT_TONE"
+  case "$PROGRAM_NAME" in
+    morning-news)
+      style_name="${MORNING_STYLE_NAME:-主播}"
+      taiwan_count="${MORNING_TAIWAN_NEWS_COUNT:-5}"
+      world_count="${MORNING_WORLD_NEWS_COUNT:-3}"
+      script_tone="${MORNING_SCRIPT_TONE:-podcast聊天風、清楚、自然、適合口語播報}"
+      ;;
+    evening-news)
+      style_name="${EVENING_STYLE_NAME:-晚安主播}"
+      taiwan_count="${EVENING_TAIWAN_NEWS_COUNT:-4}"
+      world_count="${EVENING_WORLD_NEWS_COUNT:-4}"
+      script_tone="${EVENING_SCRIPT_TONE:-沉穩、清楚、自然、適合晚間新聞播報}"
+      ;;
+    feature-news)
+      style_name="${FEATURE_STYLE_NAME:-深度專題主持}"
+      taiwan_count="${FEATURE_TAIWAN_NEWS_COUNT:-2}"
+      world_count="${FEATURE_WORLD_NEWS_COUNT:-2}"
+      script_tone="${FEATURE_SCRIPT_TONE:-分析型、脈絡清楚、節奏穩定}"
+      ;;
+    *)
+      style_name="主播"
+      taiwan_count="$NEWS_COUNT"
+      world_count="0"
+      script_tone="清楚、自然、適合口語播報"
+      ;;
+  esac
+
+  python3 - <<'PY' "$CANDIDATES_FILE" "$request_file" "$DEEPSEEK_MODEL" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}"
 import json
 import sys
 from pathlib import Path
@@ -45,9 +76,24 @@ style_name = sys.argv[7]
 taiwan_count = int(sys.argv[8])
 world_count = int(sys.argv[9])
 script_tone = sys.argv[10]
+feature_topic = (sys.argv[11] or "").strip()
 
 candidates_data = json.loads(candidates_file.read_text(encoding="utf-8"))
 candidates = candidates_data.get("candidates", [])
+
+topic_rule = ""
+if program_name == "feature-news" and feature_topic:
+    topic_rule = f"""
+13. 所有被選入 selected 和 script 的材料，都必須與主題直接相關：{feature_topic}
+14. 若候選材料與主題關聯性不足，請主動剔除，不要勉強填充。
+15. script 的主軸與開場，必須明確聚焦在 {feature_topic}。
+"""
+
+selection_priority = {
+    "morning-news": "優先選擇重要、清楚、有公共性、和台灣聽眾相關的早安新聞。",
+    "evening-news": "優先選擇當日重大事件、有總結性、和台灣聽眾相關的晚間新聞。",
+    "feature-news": "優先選擇與專題主題直接相關、有分析深度、能形成完整論述的材料。",
+}.get(program_name, "優先選擇重要、清楚、有公共性、和台灣聽眾相關的內容。")
 
 system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰稿人。
 你要為 {program_name} 撰寫一篇可直接拿去 TTS 朗讀的新聞播報稿。
@@ -59,12 +105,17 @@ system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰
 4. 先從候選新聞中選出最終 {news_count} 則。
 5. 其中台灣新聞約 {taiwan_count} 則，國際新聞約 {world_count} 則。
 6. 避免重複主題，特別是同一國際事件不要選太多相近角度。
-7. 優先選擇適合早安新聞播報的內容：重要、清楚、有公共性、和台灣聽眾相關。
+7. {selection_priority}
 8. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。
 9. 播報稿長度目標約 {script_target_chars} 字。
 10. 播報稿要有開場、各則新聞之間自然轉場、結尾。
 11. 不要使用條列式，不要寫成新聞稿腔，要像主持人在自然播報。
-12. 只輸出 JSON，不要有任何額外說明文字。
+12. 數字一律以中文書寫。年份讀成逐字（如 2026 -> 二零二六年），數量讀成口語（如 300億 -> 三百億，3.5% -> 百分之三點五）。
+13. 英文縮寫若有公認中文名稱，一律使用中文名（如 NVIDIA -> 輝達、Google -> 谷歌、Microsoft -> 微軟、Apple -> 蘋果）。
+14. 英文縮寫若可展開翻譯，則翻譯（如 GDP -> 國內生產毛額、AI -> 人工智慧）。
+15. 品牌名若無固定中文名（如 OpenAI），首次出現時以描述性中文帶出（如「美國人工智慧新創公司」），後續以「該公司」或「該平台」代稱，避免重複出現英文。
+16. 播報稿最終不得包含任何英文字母或阿拉伯數字。
+17. 只輸出 JSON，不要有任何額外說明文字。{topic_rule}
 
 輸出 JSON 格式如下：
 {{
@@ -90,6 +141,7 @@ user_payload = {
     "target_chars": script_target_chars,
     "style_name": style_name,
     "tone": script_tone,
+    "feature_topic": feature_topic,
     "selection_rules": {
         "taiwan_news_count": taiwan_count,
         "world_news_count": world_count,
@@ -120,7 +172,7 @@ PY
     -w "%{http_code}" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-    --max-time "${DEEPSEEK_TIMEOUT:-120}" \
+    --max-time "${DEEPSEEK_WRITE_TIMEOUT:-180}" \
     -d @"$request_file" \
     "$DEEPSEEK_API_URL")"
 

@@ -10,7 +10,7 @@ prepare_candidate_input() {
   local raw_file="$1"
   local prepared_file="$2"
 
-  python3 - <<'PY' "$raw_file" "$prepared_file" "${NEWS_URL_BLACKLIST_PATTERNS:-}" "${NEWS_SOURCE_BLACKLIST:-}" "${MIN_NEWS_TITLE_LENGTH:-12}" "${NEWS_EXACT_URL_BLACKLIST_PATTERNS:-}" "${HISTORY_FILE:-}" "${HISTORY_LOOKBACK_DAYS:-3}" "${NEWS_MAX_AGE_DAYS:-3}"
+  python3 - <<'PY' "$raw_file" "$prepared_file" "${NEWS_URL_BLACKLIST_PATTERNS:-}" "${NEWS_SOURCE_BLACKLIST:-}" "${MIN_NEWS_TITLE_LENGTH:-12}" "${NEWS_EXACT_URL_BLACKLIST_PATTERNS:-}" "${HISTORY_FILE:-}" "${HISTORY_LOOKBACK_DAYS:-3}" "${NEWS_MAX_AGE_DAYS:-3}" "$PROGRAM_NAME" "${FEATURE_TOPIC:-}"
 import json
 import re
 import sys
@@ -27,6 +27,8 @@ exact_url_blacklist_raw = sys.argv[6]
 history_file_raw = sys.argv[7]
 history_lookback_days = int(sys.argv[8])
 news_max_age_days = int(sys.argv[9])
+program_name = sys.argv[10]
+feature_topic = (sys.argv[11] or '').strip()
 
 data = json.loads(raw_file.read_text(encoding="utf-8"))
 results = data.get("results", [])
@@ -56,6 +58,7 @@ stats = {
     "filtered_stale": 0,
     "filtered_duplicate": 0,
     "filtered_history": 0,
+    "filtered_topic_mismatch": 0,
 }
 
 def normalize_title(title: str) -> str:
@@ -66,6 +69,166 @@ def normalize_title(title: str) -> str:
 
 def normalize_url(url: str) -> str:
     return (url or "").strip().rstrip("/")
+
+
+def extract_topic_keywords(topic: str):
+    text = (topic or "").strip().lower()
+    if not text:
+        return []
+
+    stopwords = {
+        "latest", "news", "analysis", "impact", "feature", "topic",
+        "??", "??", "??", "??", "??", "??", "??", "??", "??",
+        "??", "??", "??", "???", "??", "??", "??",
+    }
+    keywords = []
+    seen_keywords = set()
+
+    for part in re.findall(r"[a-z0-9][a-z0-9\-]{1,}|[\u4e00-\u9fff]+", text, re.I):
+        chunk = part.strip().lower()
+        if not chunk:
+            continue
+        if re.fullmatch(r"20\d{2}", chunk):
+            if chunk not in seen_keywords:
+                seen_keywords.add(chunk)
+                keywords.append(chunk)
+            continue
+        if re.fullmatch(r"[a-z0-9][a-z0-9\-]{1,}", chunk, re.I):
+            if chunk not in stopwords and chunk not in seen_keywords:
+                seen_keywords.add(chunk)
+                keywords.append(chunk)
+            continue
+        if len(chunk) <= 4:
+            if chunk not in stopwords and chunk not in seen_keywords:
+                seen_keywords.add(chunk)
+                keywords.append(chunk)
+            continue
+        for size in (4, 3, 2):
+            for i in range(0, len(chunk) - size + 1):
+                kw = chunk[i:i + size]
+                if kw in stopwords or kw in seen_keywords:
+                    continue
+                seen_keywords.add(kw)
+                keywords.append(kw)
+
+    keywords.sort(key=lambda x: (-len(x), x))
+    return keywords[:10]
+
+topic_keywords = extract_topic_keywords(feature_topic)
+core_topic_keywords = [kw for kw in topic_keywords if not re.fullmatch(r"20\d{2}", kw)][:4]
+
+def feature_topic_exclusions(topic: str):
+    raw = (topic or "").lower()
+    if not raw:
+        return []
+    if any(token in raw for token in ["??", "??", "??", "tariff", "export", "trade"]):
+        return ["??", "??", "??", "??", "???", "???", "????", "Sunday Service"]
+    if any(token in raw for token in ["gtc", "??", "nvidia"]):
+        return ["??", "??", "????", "?????", "????"]
+    if any(token in raw for token in ["wbc", "?????", "???", "???"]):
+        return ["????", "???", "???", "??", "??"]
+    return []
+
+topic_exclusions = feature_topic_exclusions(feature_topic)
+
+
+def feature_topic_requirements(topic: str):
+    raw = (topic or "").lower()
+    if not raw:
+        return []
+    if any(token in raw for token in ["gtc"]):
+        return [["gtc"], ["??", "nvidia"]]
+    if any(token in raw for token in ["??", "??", "??", "tariff", "export", "trade"]):
+        return [["??", "tariff"], ["??", "??", "export", "trade", "??"]]
+    if any(token in raw for token in ["wbc", "?????"]):
+        return [["wbc", "?????", "???????"], ["???", "???"]]
+    return []
+
+required_term_groups = feature_topic_requirements(feature_topic)
+
+def feature_source_boost(source: str, url: str) -> int:
+    if program_name != "feature-news":
+        return 0
+    source_lc = (source or "").strip().lower()
+    url_lc = (url or "").strip().lower()
+
+    preferred = [
+        "reuters", "ap", "associated press", "bloomberg", "financial times",
+        "wsj", "wall street journal", "nikkei", "economist", "cna", "中央社",
+        "udn", "經濟日報", "工商時報",
+    ]
+    for token in preferred:
+        if token in source_lc or token in url_lc:
+            return 2
+    return 0
+
+def feature_topic_metrics(title: str, desc: str, query: str, url: str):
+    if program_name != "feature-news" or not feature_topic:
+        return 0, 0, [], 0
+    haystack = " ".join([
+        (title or "").lower(),
+        (desc or "").lower(),
+        (query or "").lower(),
+        (url or "").lower(),
+    ])
+    score = 0
+    matched = []
+    if feature_topic.lower() in haystack:
+        score += 3
+        matched.append(feature_topic.lower())
+    for kw in topic_keywords:
+        if kw in haystack:
+            score += 2 if len(kw) >= 3 else 1
+            matched.append(kw)
+    core_hits = sum(1 for kw in core_topic_keywords if kw in haystack)
+    required_hits = 0
+    for group in required_term_groups:
+        if any(term.lower() in haystack for term in group):
+            required_hits += 1
+    return score, core_hits, matched, required_hits
+
+def feature_retrieval_score(title: str, desc: str, query: str, url: str, source: str):
+    if program_name != "feature-news":
+        return 0
+    title_lc = (title or "").lower()
+    desc_lc = (desc or "").lower()
+    query_lc = (query or "").lower()
+    topic_lc = (feature_topic or "").lower()
+
+    score = 0
+    if topic_lc and topic_lc in title_lc:
+        score += 5
+    if topic_lc and topic_lc in query_lc:
+        score += 3
+
+    for kw in core_topic_keywords:
+        if kw in title_lc:
+            score += 3
+        elif kw in desc_lc:
+            score += 1
+
+    for group in required_term_groups:
+        if any(term.lower() in title_lc for term in group):
+            score += 4
+        elif any(term.lower() in query_lc for term in group):
+            score += 2
+
+    score += feature_source_boost(source, url)
+    return score
+
+def feature_topic_is_excluded(title: str, desc: str, query: str, url: str) -> bool:
+    if program_name != "feature-news" or not topic_exclusions:
+        return False
+    haystack = " ".join([
+        (title or "").lower(),
+        (desc or "").lower(),
+        (query or "").lower(),
+        (url or "").lower(),
+    ])
+    for token in topic_exclusions:
+        if token.lower() in haystack:
+            return True
+    return False
 
 def is_bad_url(url: str) -> bool:
     if not url:
@@ -286,6 +449,10 @@ for block in results:
             stats["filtered_non_article"] += 1
             continue
 
+        if feature_topic_is_excluded(title, desc, query, url):
+            stats["filtered_topic_mismatch"] += 1
+            continue
+
         published_at = parse_age_datetime(age)
         if published_at and published_at < freshness_cutoff:
             stats["filtered_stale"] += 1
@@ -308,6 +475,21 @@ for block in results:
             stats["filtered_history"] += 1
             continue
 
+        topic_score, topic_core_hits, topic_matched_keywords, topic_required_hits = feature_topic_metrics(title, desc, query, url)
+        retrieval_score = feature_retrieval_score(title, desc, query, url, source)
+        if program_name == "feature-news" and feature_topic:
+            min_core_hits = 1 if len(core_topic_keywords) <= 1 else 2
+            haystack = " ".join([title.lower(), desc.lower(), query.lower(), url.lower()])
+            if required_term_groups and topic_required_hits < len(required_term_groups):
+                stats["filtered_topic_mismatch"] += 1
+                continue
+            if topic_core_hits < min_core_hits and feature_topic.lower() not in haystack:
+                stats["filtered_topic_mismatch"] += 1
+                continue
+            if topic_score < 3:
+                stats["filtered_topic_mismatch"] += 1
+                continue
+
         seen.add(dedupe_key)
 
         items.append({
@@ -317,15 +499,50 @@ for block in results:
             "url": url,
             "source": source,
             "age": age,
+            "topic_score": topic_score,
+            "topic_core_hits": topic_core_hits,
+            "topic_required_hits": topic_required_hits,
+            "topic_matched_keywords": topic_matched_keywords,
+            "retrieval_score": retrieval_score,
         })
 
+if program_name == "feature-news" and feature_topic:
+    items.sort(
+        key=lambda x: (
+            int(x.get("topic_required_hits", 0)),
+            int(x.get("retrieval_score", 0)),
+            int(x.get("topic_core_hits", 0)),
+            int(x.get("topic_score", 0)),
+            x.get("title", ""),
+        ),
+        reverse=True,
+    )
+
 stats["kept_count"] = len(items)
+
+material_summary = {}
+if program_name == "feature-news" and feature_topic:
+    material_summary = {
+        "high_confidence_count": sum(
+            1 for x in items
+            if int(x.get("topic_required_hits", 0)) >= max(1, len(required_term_groups))
+            and int(x.get("retrieval_score", 0)) >= 8
+        ),
+        "usable_count": sum(
+            1 for x in items
+            if int(x.get("retrieval_score", 0)) >= 5
+        ),
+    }
 
 prepared = {
     "program_name": data.get("program_name", ""),
     "generated_at": data.get("generated_at", ""),
+    "feature_topic": feature_topic,
+    "feature_scope": data.get("feature_scope", ""),
+    "feature_profile": data.get("feature_profile", ""),
     "item_count": len(items),
     "filter_stats": stats,
+    "material_summary": material_summary,
     "items": items
 }
 
@@ -354,7 +571,7 @@ cluster_events_ai() {
 
   local clustering_input_limit="${EVENT_CLUSTERING_INPUT_LIMIT:-60}"
   local clustering_strength="${EVENT_CLUSTERING_STRENGTH:-medium}"
-  local clustering_timeout="${EVENT_CLUSTERING_TIMEOUT:-120}"
+  local clustering_timeout="${EVENT_CLUSTERING_TIMEOUT:-90}"
 
   python3 - <<'PY' "$prepared_file" "$request_file" "$DEEPSEEK_MODEL" "$clustering_input_limit" "$clustering_strength" "$PROGRAM_NAME"
 import json
@@ -389,10 +606,21 @@ for x in items:
         "age": (x.get("age") or "").strip(),
     })
 
+if program_name == "feature-news":
+    dedup_instruction = (
+        "Dedup strength is loose: only merge articles covering the exact same specific sub-event or announcement. "
+        "Keep articles that cover different dimensions, timeframes, actors, or policy implications, "
+        "even if on the same broad topic."
+    )
+else:
+    dedup_instruction = (
+        "Dedup strength is medium: merge same core event across outlets, "
+        "but keep materially different updates or angles."
+    )
 system_prompt = (
     "You are a Traditional Chinese news event clustering assistant. "
     "Cluster the input news items into distinct real-world events. "
-    "Dedup strength is medium: merge same core event across outlets, but keep materially different updates or angles. "
+    f"{dedup_instruction} "
     "Output JSON only."
 )
 
@@ -439,14 +667,19 @@ request_file.write_text(
 PY
 
   local http_code
-  http_code="$(curl -sS \
+  http_code="$(curl -s \
     -o "$response_file" \
     -w "%{http_code}" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
     --max-time "$clustering_timeout" \
     -d @"$request_file" \
-    "$DEEPSEEK_API_URL")"
+    "$DEEPSEEK_API_URL" || true)"
+
+  if ! [[ "$http_code" =~ ^[0-9]{3}$ ]]; then
+    log WARN "step=cluster_events_ai fallback reason=curl_error_or_timeout"
+    return 0
+  fi
 
   if [[ "$http_code" != "200" ]]; then
     log WARN "step=cluster_events_ai fallback reason=http_code_$http_code"
@@ -454,7 +687,7 @@ PY
   fi
 
   local cluster_result
-  if ! cluster_result="$(python3 - <<'PY' "$response_file" "$prepared_file" "$clustering_input_limit"
+  if ! cluster_result="$(python3 - 2>/dev/null <<'PY' "$response_file" "$prepared_file" "$clustering_input_limit"
 import json
 import re
 import sys
@@ -490,11 +723,38 @@ def normalize_item(item):
         "age": (item.get("age") or "").strip(),
     }
 
+def build_lookup(items):
+    by_url = {}
+    by_title = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = (item.get("url") or "").strip()
+        title = (item.get("title") or "").strip().lower()
+        if url:
+            by_url[url] = item
+        if title:
+            by_title[title] = item
+    return by_url, by_title
+
+def enrich_item(normalized, original_by_url, original_by_title):
+    if not normalized:
+        return None
+    original = original_by_url.get(normalized.get("url", ""))
+    if original is None:
+        original = original_by_title.get((normalized.get("title") or "").strip().lower())
+    if original is None:
+        return normalized
+    merged = dict(original)
+    merged.update({k: v for k, v in normalized.items() if v not in ("", None, [])})
+    return merged
+
 prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
 original_items = prepared.get("items", [])
 if not isinstance(original_items, list):
     original_items = []
 limited_original = original_items[:max(1, input_limit)]
+original_by_url, original_by_title = build_lookup(limited_original)
 
 data = json.loads(response_file.read_text(encoding="utf-8"))
 content = data["choices"][0]["message"]["content"]
@@ -508,7 +768,7 @@ deduped_items = []
 for item in parsed.get("deduped_items", []):
     normalized = normalize_item(item)
     if normalized:
-        deduped_items.append(normalized)
+        deduped_items.append(enrich_item(normalized, original_by_url, original_by_title))
 
 if not deduped_items and clusters:
     seen_idx = set()
@@ -522,7 +782,7 @@ if not deduped_items and clusters:
             continue
         normalized = normalize_item(limited_original[idx])
         if normalized:
-            deduped_items.append(normalized)
+            deduped_items.append(enrich_item(normalized, original_by_url, original_by_title))
             seen_idx.add(idx)
 
 if not deduped_items:
@@ -538,6 +798,16 @@ prepared["cluster_stats"] = {
     "after_count": after_count,
     "cluster_count": len(clusters),
     "merged_count": max(0, before_count - after_count),
+}
+prepared["material_summary"] = {
+    "high_confidence_count": sum(
+        1 for x in deduped_items
+        if int(x.get("topic_required_hits", 0)) >= 1 and int(x.get("retrieval_score", 0)) >= 8
+    ),
+    "usable_count": sum(
+        1 for x in deduped_items
+        if int(x.get("retrieval_score", 0)) >= 5
+    ),
 }
 
 prepared_file.write_text(
@@ -580,6 +850,20 @@ select_candidates() {
 
   if [[ ! -f "$prepared_file" || ! -s "$prepared_file" ]]; then
     die "prepared search items file not generated: $prepared_file"
+  fi
+
+  # Early material count check for feature-news (before clustering + AI calls)
+  if [[ "$PROGRAM_NAME" == "feature-news" && "${FEATURE_MATERIAL_COUNT_GATE_ENABLED:-1}" == "1" ]]; then
+    local _item_count
+    _item_count=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('item_count',0))" "$prepared_file" 2>/dev/null || echo 0)
+    local _min_items="${FEATURE_MIN_PREPARED_ITEMS:-4}"
+    log INFO "step=select_candidates material_count_check item_count=$_item_count min=$_min_items"
+    if (( _item_count < _min_items )); then
+      log WARN "step=select_candidates material_insufficient item_count=$_item_count min=$_min_items"
+      FEATURE_MATERIAL_INSUFFICIENT=1
+      export FEATURE_MATERIAL_INSUFFICIENT
+      return 0
+    fi
   fi
 
   cluster_events_ai "$prepared_file" "$cluster_request_file" "$cluster_response_file"
@@ -680,9 +964,13 @@ PY
     -w "%{http_code}" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-    --max-time "${DEEPSEEK_TIMEOUT:-120}" \
+    --max-time "${DEEPSEEK_SELECT_TIMEOUT:-120}" \
     -d @"$request_file" \
-    "$DEEPSEEK_API_URL")"
+    "$DEEPSEEK_API_URL" || true)"
+
+  if ! [[ "$http_code" =~ ^[0-9]{3}$ ]]; then
+    http_code="000"
+  fi
 
   if [[ "$http_code" != "200" ]]; then
       log WARN "step=select_candidates fallback local_pick reason=http_${http_code}"

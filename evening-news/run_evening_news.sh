@@ -3,6 +3,12 @@ set -Eeuo pipefail
 
 source /home/vboxuser/news-broadcast-system/common/scripts/load_env.sh evening
 source /home/vboxuser/news-broadcast-system/common/scripts/common.sh
+source /home/vboxuser/news-broadcast-system/common/scripts/search_news.sh
+source /home/vboxuser/news-broadcast-system/common/scripts/select_candidates.sh
+source /home/vboxuser/news-broadcast-system/common/scripts/write_script.sh
+source /home/vboxuser/news-broadcast-system/common/scripts/generate_tts.sh
+source /home/vboxuser/news-broadcast-system/common/scripts/mix_audio.sh
+source /home/vboxuser/news-broadcast-system/common/scripts/send_telegram.sh
 
 LOCK_FILE="/tmp/news_broadcast_evening.lock"
 
@@ -13,6 +19,331 @@ if ! flock -n 9; then
 fi
 
 START_TS=$(date +%s)
+
+send_selected_sources_summary() {
+  if [[ ! -f "$SELECTED_FILE" || ! -s "$SELECTED_FILE" ]]; then
+    log WARN "step=send_sources skipped selected file missing: $SELECTED_FILE"
+    return 0
+  fi
+
+  local source_message=""
+  if ! source_message="$(python3 - <<'PY' "$SELECTED_FILE" "$OUTPUT_DIR/prepared_search_items.json" "$PROGRAM_NAME"
+import json
+import re
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import urlparse, urlsplit, urlunsplit
+
+selected_file = Path(sys.argv[1])
+prepared_file = Path(sys.argv[2])
+program_name = sys.argv[3]
+
+def parse_date(text: str, url: str) -> str:
+    raw = (text or "").strip()
+    def _parse_any(s: str) -> str | None:
+        if not s:
+            return None
+        m = re.search(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})", s)
+        if m:
+            return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        m = re.search(r"(20\d{2})年(\d{1,2})月(\d{1,2})日?", s)
+        if m:
+            return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        for fmt in (
+            "%a, %d %b %Y %H:%M:%S GMT",
+            "%a, %d %b %Y %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        ):
+            try:
+                dt = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+                return dt.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+        lower = s.lower()
+        now = datetime.now(timezone.utc)
+        if "yesterday" in lower or "昨天" in s:
+            return (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        if "today" in lower or "今天" in s:
+            return now.strftime("%Y-%m-%d")
+        m = re.search(r"(\d+)\s*(day|days)\s*ago", lower)
+        if m:
+            return (now - timedelta(days=int(m.group(1)))).strftime("%Y-%m-%d")
+        m = re.search(r"(\d+)\s*(hour|hours|hr|hrs|min|mins|minute|minutes)\s*ago", lower)
+        if m:
+            return now.strftime("%Y-%m-%d")
+        m = re.search(r"(\d+)\s*(天|日)\s*前", s)
+        if m:
+            return (now - timedelta(days=int(m.group(1)))).strftime("%Y-%m-%d")
+        m = re.search(r"(\d+)\s*(小時|分鐘|分)\s*前", s)
+        if m:
+            return now.strftime("%Y-%m-%d")
+        iso_text = s.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(iso_text)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%d")
+        except Exception:
+            return None
+
+    parsed = _parse_any(raw)
+    if parsed:
+        return parsed
+
+    u = (url or "").strip()
+    m = re.search(r"/(20\d{2})/(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])(?:/|$)", u)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    m = re.search(r"/(20\d{2})(0[1-9]|1[0-2])([0-2]\d|3[01])(?:[^0-9]|$)", u)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return "unknown"
+
+def get_domain(source: str, url: str) -> str:
+    source = (source or "").strip()
+    if source:
+        s = re.sub(r"^https?://", "", source, flags=re.I).strip().strip("/")
+        s = s.split("/")[0]
+        if s and "." in s and " " not in s:
+            return s.lower()
+    parsed = urlparse((url or "").strip())
+    return (parsed.netloc or "unknown").lower()
+
+def normalize_url(url: str) -> list[str]:
+    u = (url or "").strip()
+    if not u:
+        return []
+    keys = {u, u.rstrip("/")}
+    try:
+        s = urlsplit(u)
+        no_q = urlunsplit((s.scheme, s.netloc, s.path, "", ""))
+        keys.add(no_q)
+        keys.add(no_q.rstrip("/"))
+    except Exception:
+        pass
+    return [x for x in keys if x]
+
+payload = json.loads(selected_file.read_text(encoding="utf-8"))
+items = payload.get("selected", [])
+if not isinstance(items, list):
+    items = []
+
+age_by_url = {}
+if prepared_file.exists():
+    try:
+        prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
+        for it in prepared.get("items", []):
+            if not isinstance(it, dict):
+                continue
+            age = (it.get("age") or "").strip()
+            for k in normalize_url(str(it.get("url") or "")):
+                if k and age and k not in age_by_url:
+                    age_by_url[k] = age
+    except Exception:
+        pass
+
+lines = []
+for idx, item in enumerate(items, 1):
+    if not isinstance(item, dict):
+        continue
+    title = (item.get("title") or "").strip() or "（無標題）"
+    url = str(item.get("url") or "")
+    raw_age = str(item.get("age") or "").strip()
+    if not raw_age:
+        for k in normalize_url(url):
+            if k in age_by_url:
+                raw_age = age_by_url[k]
+                break
+    age = parse_date(raw_age, url)
+    source = get_domain(str(item.get("source") or ""), url)
+    lines.append(f"{idx}. {age} | {source} | {title}")
+
+if not lines:
+    print(f"{program_name} 來源資訊：無可用資料")
+    raise SystemExit(0)
+
+header = f"{program_name} 來源資訊（{len(lines)}則）"
+msg = header + "\n" + "\n".join(lines)
+if len(msg) > 3500:
+    kept = []
+    size = len(header) + 1
+    for line in lines:
+        extra = len(line) + 1
+        if size + extra > 3400:
+            break
+        kept.append(line)
+        size += extra
+    msg = header + "\n" + "\n".join(kept) + "\n（其餘略）"
+print(msg)
+PY
+  )"; then
+    log WARN "step=send_sources skipped parse failure selected_file=$SELECTED_FILE"
+    return 0
+  fi
+
+  send_telegram_text "$source_message"
+  log INFO "step=send_sources done selected_file=$SELECTED_FILE"
+}
+
+update_history_from_selected() {
+  if [[ ! -f "$SELECTED_FILE" || ! -s "$SELECTED_FILE" ]]; then
+    log ERROR "step=update_history skipped selected file missing: $SELECTED_FILE"
+    return 0
+  fi
+
+  if [[ -z "${HISTORY_FILE:-}" ]]; then
+    log ERROR "step=update_history skipped HISTORY_FILE is empty"
+    return 0
+  fi
+
+  local history_result=""
+  if ! history_result="$(python3 - <<'PY' "$SELECTED_FILE" "$HISTORY_FILE" "${HISTORY_MAX_ITEMS:-1000}" "$PROGRAM_NAME"
+import json
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+selected_file = Path(sys.argv[1])
+history_file = Path(sys.argv[2])
+history_max_items = int(sys.argv[3])
+program_name = sys.argv[4]
+
+def normalize_url(url: str) -> str:
+    return (url or "").strip().rstrip("/")
+
+def normalize_title(title: str) -> str:
+    t = (title or "").strip().lower()
+    t = re.sub(r"\s+", "", t)
+    t = re.sub(r"[^\w\u4e00-\u9fff]+", "", t)
+    return t
+
+def load_json_list(path: Path):
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []
+
+selected_payload = json.loads(selected_file.read_text(encoding="utf-8"))
+selected_items = selected_payload.get("selected", [])
+if not isinstance(selected_items, list):
+    selected_items = []
+
+history_items = load_json_list(history_file)
+now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+new_entries = []
+for item in selected_items:
+    if not isinstance(item, dict):
+        continue
+    title = (item.get("title") or "").strip()
+    url = (item.get("url") or "").strip()
+    if not title and not url:
+        continue
+    new_entries.append({
+        "program_name": program_name,
+        "published_at": now_iso,
+        "title": title,
+        "title_norm": normalize_title(title),
+        "url": url,
+        "url_norm": normalize_url(url),
+        "source": (item.get("source") or "").strip(),
+        "category": (item.get("category") or "").strip(),
+        "region": (item.get("region") or "").strip(),
+    })
+
+merged = []
+seen = set()
+for entry in new_entries + history_items:
+    if not isinstance(entry, dict):
+        continue
+    url_norm = normalize_url(str(entry.get("url_norm") or entry.get("url") or ""))
+    title_norm = normalize_title(str(entry.get("title_norm") or entry.get("title") or ""))
+    key = url_norm or title_norm
+    if not key:
+        continue
+    if key in seen:
+        continue
+    seen.add(key)
+    entry["url_norm"] = url_norm
+    entry["title_norm"] = title_norm
+    merged.append(entry)
+    if len(merged) >= history_max_items:
+        break
+
+history_file.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+print(f"added={len(new_entries)} total={len(merged)}")
+PY
+  )"; then
+    log ERROR "step=update_history failed to write history file: $HISTORY_FILE"
+    return 0
+  fi
+
+  log INFO "step=update_history done $history_result history_file=$HISTORY_FILE"
+}
+
+archive_run_artifacts() {
+  local keep_count="${EVENING_RUNS_KEEP:-7}"
+  if ! [[ "$keep_count" =~ ^[0-9]+$ ]] || (( keep_count < 1 )); then
+    keep_count=7
+  fi
+
+  local run_ts run_dir
+  run_ts="$(date '+%Y%m%d_%H%M%S')"
+  run_dir="$RUNS_DIR/${run_ts}"
+
+  mkdir -p "$run_dir"
+
+  for f in \
+    "$OUTPUT_DIR/raw_search_results.json" \
+    "$OUTPUT_DIR/prepared_search_items.json" \
+    "$CANDIDATES_FILE" \
+    "$SELECTED_FILE" \
+    "$SCRIPT_FILE" \
+    "$VOICE_FILE" \
+    "$FINAL_AUDIO_FILE" \
+    "$OUTPUT_DIR/news_compressed.mp3" \
+    "$OUTPUT_DIR/news_final.mp3" \
+    "$OUTPUT_DIR/news.mp3"; do
+    [[ -f "$f" ]] && cp -f "$f" "$run_dir/"
+  done
+
+  python3 - <<'PY' "$run_dir/metadata.json" "$PROGRAM_NAME" "$START_TS" "$(date +%s)"
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+meta_file = Path(sys.argv[1])
+program_name = sys.argv[2]
+start_ts = int(sys.argv[3])
+end_ts = int(sys.argv[4])
+meta = {
+    "program_name": program_name,
+    "started_at_utc": datetime.fromtimestamp(start_ts, tz=timezone.utc).isoformat(),
+    "finished_at_utc": datetime.fromtimestamp(end_ts, tz=timezone.utc).isoformat(),
+    "duration_seconds": max(0, end_ts - start_ts),
+}
+meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+PY
+
+  log INFO "step=archive_run done run_dir=$run_dir keep_count=$keep_count"
+
+  mapfile -t run_dirs < <(find "$RUNS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
+  local total="${#run_dirs[@]}"
+  if (( total > keep_count )); then
+    local remove_count=$((total - keep_count))
+    for ((i=0; i<remove_count; i++)); do
+      rm -rf "${run_dirs[$i]}"
+      log INFO "step=archive_run pruned dir=${run_dirs[$i]}"
+    done
+  fi
+}
 
 on_error() {
   local exit_code=$?
@@ -35,33 +366,15 @@ log INFO "NEWS_COUNT=$NEWS_COUNT"
 log INFO "CANDIDATE_COUNT=$CANDIDATE_COUNT"
 log INFO "SCRIPT_TARGET_CHARS=$SCRIPT_TARGET_CHARS"
 
-log INFO "step=search_news start"
-sleep 1
-log INFO "step=search_news done"
-
-log INFO "step=select_candidates start"
-sleep 1
-log INFO "step=select_candidates done"
-
-log INFO "step=verify_news start"
-sleep 1
-log INFO "step=verify_news done"
-
-log INFO "step=write_script start"
-sleep 1
-log INFO "step=write_script done"
-
-log INFO "step=tts start"
-sleep 1
-log INFO "step=tts done"
-
-log INFO "step=mix_audio start"
-sleep 1
-log INFO "step=mix_audio done"
-
-log INFO "step=send_telegram start"
-sleep 1
-log INFO "step=send_telegram done"
+search_news
+select_candidates
+write_script
+generate_tts
+mix_audio
+send_telegram_audio
+send_selected_sources_summary
+update_history_from_selected
+archive_run_artifacts
 
 END_TS=$(date +%s)
 DURATION=$((END_TS - START_TS))

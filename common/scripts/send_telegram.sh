@@ -33,3 +33,22 @@ send_telegram_audio() {
 
   log INFO "step=send_telegram done"
 }
+
+send_telegram_text() {
+  local message="$1"
+  local chat_id="${2:-${TELEGRAM_CHAT_ID:-}}"
+
+  if [[ -z "$chat_id" ]]; then
+    die "telegram chat_id is empty"
+  fi
+
+  local response
+  response=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d chat_id="$chat_id" \
+    --data-urlencode text="$message")
+
+  if ! echo "$response" | grep -q '"ok":true'; then
+    log ERROR "telegram text response: $response"
+    die "telegram send text failed"
+  fi
+}
