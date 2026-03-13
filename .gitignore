@@ -7,3 +7,23 @@ feature-news/output/*.mp3
 morning-news/runs/
 evening-news/runs/
 feature-news/runs/
+
+# Output directories (generated files)
+*/output/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Backup files
+*.bak
+*.bak_*
+
+# Temp test files
+test_*.txt
+
+# Test audio
+*.mp3
+!morning-news/jingle.mp3
+!evening-news/jingle.mp3
+!feature-news/jingle.mp3
