@@ -20,6 +20,17 @@ fi
 
 START_TS=$(date +%s)
 
+# 隨機挑選主播
+_anchors=("小蝦:zh-TW-HsiaoChenNeural" "小鯨:zh-TW-YunJheNeural" "小貝:zh-TW-HsiaoYuNeural")
+_pick="${_anchors[$((RANDOM % 3))]}"
+EVENING_STYLE_NAME="${_pick%%:*}"
+TTS_VOICE="${_pick##*:}"
+export EVENING_STYLE_NAME TTS_VOICE
+
+# 動態檔名：YYYYMMDD-晚安新聞.mp3
+FINAL_AUDIO_FILE="$EVENING_OUTPUT_DIR/$(date '+%Y%m%d')-晚安新聞.mp3"
+export FINAL_AUDIO_FILE
+
 send_selected_sources_summary() {
   if [[ ! -f "$SELECTED_FILE" || ! -s "$SELECTED_FILE" ]]; then
     log WARN "step=send_sources skipped selected file missing: $SELECTED_FILE"
@@ -148,7 +159,8 @@ lines = []
 for idx, item in enumerate(items, 1):
     if not isinstance(item, dict):
         continue
-    title = (item.get("title") or "").strip() or "（無標題）"
+    title_zh = (item.get("title_zh") or "").strip()
+    title = title_zh or (item.get("title") or "").strip() or "（無標題）"
     url = str(item.get("url") or "")
     raw_age = str(item.get("age") or "").strip()
     if not raw_age:
@@ -368,6 +380,22 @@ log INFO "SCRIPT_TARGET_CHARS=$SCRIPT_TARGET_CHARS"
 
 search_news
 select_candidates
+
+# 抓取台股資料（僅晚安新聞）
+STOCK_DATA_FILE="$OUTPUT_DIR/stock_data.json"
+if python3 /home/vboxuser/news-broadcast-system/common/scripts/fetch_stock_data.py > "$STOCK_DATA_FILE" 2>/dev/null; then
+  log INFO "step=fetch_stock_data done file=$STOCK_DATA_FILE"
+  export STOCK_DATA_FILE
+else
+  EXIT_CODE=$?
+  if [[ $EXIT_CODE -eq 1 ]]; then
+    log INFO "step=fetch_stock_data skipped market_closed"
+  else
+    log WARN "step=fetch_stock_data failed exit_code=$EXIT_CODE stock data will be omitted"
+  fi
+  unset STOCK_DATA_FILE
+fi
+
 write_script
 generate_tts
 mix_audio

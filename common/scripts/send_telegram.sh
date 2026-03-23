@@ -18,7 +18,12 @@ send_telegram_audio() {
   fi
 
   local caption
-  caption="${PROGRAM_NAME} $(date '+%F %T')"
+  case "${PROGRAM_NAME:-}" in
+    morning-news) caption="$(date '+%Y-%m-%d') 早安新聞" ;;
+    evening-news) caption="$(date '+%Y-%m-%d') 晚安新聞" ;;
+    feature-news) caption="${FEATURE_TOPIC:-新聞專題}" ;;
+    *) caption="${PROGRAM_NAME:-news} $(date '+%F')" ;;
+  esac
 
   local response
   response=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendAudio" \

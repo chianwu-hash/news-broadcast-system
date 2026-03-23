@@ -61,7 +61,7 @@ write_script() {
       ;;
   esac
 
-  python3 - <<'PY' "$CANDIDATES_FILE" "$request_file" "$DEEPSEEK_MODEL" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}"
+  python3 - <<'PY' "$CANDIDATES_FILE" "$request_file" "$DEEPSEEK_MODEL" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}" "${STOCK_DATA_FILE:-}"
 import json
 import sys
 from pathlib import Path
@@ -77,9 +77,32 @@ taiwan_count = int(sys.argv[8])
 world_count = int(sys.argv[9])
 script_tone = sys.argv[10]
 feature_topic = (sys.argv[11] or "").strip()
+stock_data_file = (sys.argv[12] if len(sys.argv) > 12 else "").strip()
 
 candidates_data = json.loads(candidates_file.read_text(encoding="utf-8"))
 candidates = candidates_data.get("candidates", [])
+
+# 股市資料（晚安新聞專用）
+stock_context = ""
+if program_name == "evening-news" and stock_data_file:
+    from pathlib import Path as _Path
+    _sf = _Path(stock_data_file)
+    if _sf.exists():
+        try:
+            stock = json.loads(_sf.read_text(encoding="utf-8"))
+            if stock.get("market_open"):
+                twii = stock["twii"]
+                tsmc = stock["tsmc"]
+                volatile_note = ""
+                if stock.get("is_volatile"):
+                    volatile_note = f"（大盤漲跌幅達 {abs(twii['change_pct']):.2f}%，屬劇烈震盪，請在播報後加一段簡短市場分析，約五十到八十字）"
+                stock_context = f"""
+18. 今日股市資料（必須納入播報，置於各則新聞之後）：
+    - 台股加權指數：{twii['index']:,.2f} 點，{twii['direction']} {abs(twii['change']):.2f} 點（{twii['change_pct']:+.2f}%）{volatile_note}
+    - 台積電（二三三零）：收盤價 {tsmc['price']:,.0f} 元，{tsmc['direction']} {abs(tsmc['change']):.0f} 元（{tsmc['change_pct']:+.2f}%）
+    - 股市數字同樣以中文口語化書寫（如 33400 點 -> 三萬三千四百點）"""
+        except Exception:
+            pass
 
 topic_rule = ""
 if program_name == "feature-news" and feature_topic:
@@ -95,6 +118,19 @@ selection_priority = {
     "feature-news": "優先選擇與專題主題直接相關、有分析深度、能形成完整論述的材料。",
 }.get(program_name, "優先選擇重要、清楚、有公共性、和台灣聽眾相關的內容。")
 
+from datetime import datetime, timezone, timedelta
+_now_tw = datetime.now(timezone.utc) + timedelta(hours=8)
+_date_str = f"{_now_tw.month}月{_now_tw.day}日"
+if program_name == "morning-news":
+    opening_sentence = f"歡迎收聽{_date_str}早安新聞，我是主播{style_name}。"
+elif program_name == "evening-news":
+    opening_sentence = f"歡迎收聽{_date_str}晚安新聞，我是主播{style_name}。"
+elif program_name == "feature-news":
+    _topic_display = feature_topic if feature_topic else "新聞專題"
+    opening_sentence = f"歡迎收聽{_topic_display}專題新聞，我是主播{style_name}。"
+else:
+    opening_sentence = ""
+
 system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰稿人。
 你要為 {program_name} 撰寫一篇可直接拿去 TTS 朗讀的新聞播報稿。
 
@@ -108,21 +144,22 @@ system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰
 7. {selection_priority}
 8. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。
 9. 播報稿長度目標約 {script_target_chars} 字。
-10. 播報稿要有開場、各則新聞之間自然轉場、結尾。
+10. 播報稿開頭第一句必須固定為：「{opening_sentence}」，之後各則新聞自然轉場，最後有結尾。
 11. 不要使用條列式，不要寫成新聞稿腔，要像主持人在自然播報。
 12. 數字一律以中文書寫。年份讀成逐字（如 2026 -> 二零二六年），數量讀成口語（如 300億 -> 三百億，3.5% -> 百分之三點五）。
 13. 英文縮寫若有公認中文名稱，一律使用中文名（如 NVIDIA -> 輝達、Google -> 谷歌、Microsoft -> 微軟、Apple -> 蘋果）。
 14. 英文縮寫若可展開翻譯，則翻譯（如 GDP -> 國內生產毛額、AI -> 人工智慧）。
 15. 品牌名若無固定中文名（如 OpenAI），首次出現時以描述性中文帶出（如「美國人工智慧新創公司」），後續以「該公司」或「該平台」代稱，避免重複出現英文。
 16. 播報稿最終不得包含任何英文字母或阿拉伯數字。
-17. 只輸出 JSON，不要有任何額外說明文字。{topic_rule}
+17. 只輸出 JSON，不要有任何額外說明文字。{topic_rule}{stock_context}
 
 輸出 JSON 格式如下：
 {{
   "selected": [
     {{
       "rank": 1,
-      "title": "新聞標題",
+      "title": "原文新聞標題",
+      "title_zh": "繁體中文新聞標題（若原標題已是中文則照填，英文則翻譯）",
       "source": "媒體名稱",
       "url": "https://example.com",
       "category": "politics/economy/society/world/sports/other",

@@ -23,6 +23,13 @@ FEATURE_TOPIC="${1:-${FEATURE_TOPIC:-}}"
 export FEATURE_TOPIC
 FEATURE_TEXT_ONLY_MODE="${FEATURE_TEXT_ONLY_MODE:-1}"
 
+# 隨機挑選主播
+_anchors=("小蝦:zh-TW-HsiaoChenNeural" "小鯨:zh-TW-YunJheNeural" "小貝:zh-TW-HsiaoYuNeural")
+_pick="${_anchors[$((RANDOM % 3))]}"
+FEATURE_STYLE_NAME="${_pick%%:*}"
+TTS_VOICE="${_pick##*:}"
+export FEATURE_STYLE_NAME TTS_VOICE
+
 send_selected_sources_summary() {
   if [[ ! -f "$SELECTED_FILE" || ! -s "$SELECTED_FILE" ]]; then
     log WARN "step=send_sources skipped selected file missing: $SELECTED_FILE"
@@ -152,7 +159,8 @@ lines = []
 for idx, item in enumerate(items, 1):
     if not isinstance(item, dict):
         continue
-    title = (item.get("title") or "").strip() or "（無標題）"
+    title_zh = (item.get("title_zh") or "").strip()
+    title = title_zh or (item.get("title") or "").strip() or "（無標題）"
     url = str(item.get("url") or "")
     raw_age = str(item.get("age") or "").strip()
     if not raw_age:

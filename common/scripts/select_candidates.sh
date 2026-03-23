@@ -871,6 +871,7 @@ select_candidates() {
   python3 - <<'PY' "$prepared_file" "$request_file" "$CANDIDATE_COUNT" "$PROGRAM_NAME" "$SCRIPT_TARGET_CHARS" "$DEEPSEEK_MODEL" "${EVENT_CLUSTERING_INPUT_LIMIT:-60}"
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 prepared_file = Path(sys.argv[1])
@@ -901,8 +902,56 @@ for x in items:
         "age": (x.get("age") or "").strip(),
     })
 
+# 中華職棒賽季：3/25 ~ 10/31
+def is_cpbl_season() -> bool:
+    today = date.today()
+    season_start = date(today.year, 3, 25)
+    season_end = date(today.year, 10, 31)
+    return season_start <= today <= season_end
+
+cpbl_active = is_cpbl_season()
+
+# 分類配額規則（依節目類型）
+if program_name == "morning-news":
+    tone_note = "早安新聞偏輕快，軟性類別比重可稍高。"
+    category_rules = """
+9. 新聞分類配額（請盡量均衡分配，各佔1則）：
+   - 國際（world）：1則
+   - 政治（politics）：1則
+   - 財經或科技（economy/tech）：1則，兩者輪替，優先選當天最重要的
+   - 社會或民生（society）：1則
+   - 軟性（教育/健康/環境/文化，category 填 other）：1則"""
+elif program_name == "evening-news":
+    tone_note = "晚安新聞偏深度，政治財經比重可稍高。"
+    category_rules = """
+9. 新聞分類配額（請盡量均衡分配，各佔1則）：
+   - 國際（world）：1則
+   - 政治（politics）：1則
+   - 財經或科技（economy/tech）：1則，兩者輪替，優先選當天最重要的
+   - 社會或民生（society）：1則
+   - 軟性（教育/健康/環境/文化，category 填 other）：1則"""
+else:
+    tone_note = ""
+    category_rules = ""
+
+# 中職賽季加體育 slot
+sports_rule = ""
+no_sports_rule = ""
+if not cpbl_active and program_name in ("morning-news", "evening-news"):
+    no_sports_rule = "\n10. 現在不是中華職棒賽季，請勿選入任何體育新聞（category = sports）。"
+if cpbl_active and program_name in ("morning-news", "evening-news"):
+    sports_rule = """
+10. 今日為中華職棒賽季期間，請額外加選1則體育新聞（category = sports）：
+    - 優先選「中信兄弟」相關新聞（比賽結果、選手動態等）
+    - 若找不到中信兄弟新聞，則選其他 CPBL 球隊新聞
+    - 因此本次共需選出比平時多1則（含體育共 {candidate_count_plus1} 則）""".format(
+        candidate_count_plus1=candidate_count + 1
+    )
+    candidate_count += 1  # 賽季期間多選1則
+
 system_prompt = f"""你是台灣繁體中文新聞編輯。
 你的工作是根據搜尋結果，初選出最適合做成 {program_name} 的候選新聞。
+{tone_note}
 
 請遵守以下規則：
 1. 使用繁體中文。
@@ -918,8 +967,8 @@ system_prompt = f"""你是台灣繁體中文新聞編輯。
    - source
    - url
    - reason
-   - category
-   - region
+   - category（politics/economy/tech/society/sports/other）
+   - region（taiwan/world）{category_rules}{sports_rule}{no_sports_rule}
 """
 
 user_prompt = {
@@ -936,7 +985,7 @@ user_prompt = {
                 "source": "媒體名稱",
                 "url": "https://example.com",
                 "reason": "入選原因",
-                "category": "politics/economy/society/world/sports/other",
+                "category": "politics/economy/tech/society/sports/other",
                 "region": "taiwan/world"
             }
         ]
