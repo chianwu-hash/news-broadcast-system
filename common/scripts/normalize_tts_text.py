@@ -167,12 +167,30 @@ def apply_word_overrides(text: str) -> str:
     return text
 
 
+def _is_non_cjk_token(word: str) -> bool:
+    """檢查 token 是否為全數字、全英文（非 CJK 字元）。"""
+    if not word:
+        return True
+    for ch in word:
+        if '\u4e00' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f':
+            return False
+    return True
+
+
 def apply_char_normalize(text: str) -> str:
     """Layer 2：用 jieba + pypinyin 處理字典未覆蓋的剩餘多音字。"""
     words = list(jieba.cut(text, cut_all=False))
     result = []
     for word in words:
+        # 非中文字串（數字、英文、符號）直接保留，不經 pypinyin 處理
+        if _is_non_cjk_token(word):
+            result.append(word)
+            continue
         pinyins = pinyin(word, style=Style.TONE3, heteronym=False)
+        # 避免 zip 截斷：當 word 字元數與 pinyin 長度不符時（如中英混合），保留原始 word
+        if len(word) != len(pinyins):
+            result.append(word)
+            continue
         new_word = []
         for ch, py_list in zip(word, pinyins):
             if ch in POLYPHONE_CHARS:

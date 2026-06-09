@@ -54,6 +54,7 @@ stats = {
     "filtered_short_title": 0,
     "filtered_bad_url": 0,
     "filtered_bad_source": 0,
+    "filtered_sports_filler": 0,
     "filtered_non_article": 0,
     "filtered_stale": 0,
     "filtered_duplicate": 0,
@@ -251,6 +252,15 @@ def is_bad_source(source: str) -> bool:
         return False
     return s in source_blacklist
 
+# 過濾週報/週刊式軟性體育文章（不含即時新聞價值）
+_SPORTS_FILLER_TITLE_RE = re.compile(
+    r"週報|週刊|周報|weekly\s+report|賽季展望|賽季總覽|賽季回顧",
+    re.I,
+)
+
+def is_sports_filler_title(title: str) -> bool:
+    return bool(_SPORTS_FILLER_TITLE_RE.search(title or ""))
+
 def parse_iso_datetime(value: str):
     if not value:
         return None
@@ -445,6 +455,10 @@ for block in results:
             stats["filtered_bad_source"] += 1
             continue
 
+        if is_sports_filler_title(title):
+            stats["filtered_sports_filler"] += 1
+            continue
+
         if looks_like_non_article(url, title, desc):
             stats["filtered_non_article"] += 1
             continue
@@ -602,6 +616,7 @@ for x in items:
         "title": title,
         "source": (x.get("source") or "").strip(),
         "url": url,
+        "description": (x.get("description") or "").strip()[:300],
         "query": (x.get("query") or "").strip(),
         "age": (x.get("age") or "").strip(),
     })
@@ -614,13 +629,15 @@ if program_name == "feature-news":
     )
 else:
     dedup_instruction = (
-        "Dedup strength is medium: merge same core event across outlets, "
-        "but keep materially different updates or angles."
+        "Dedup strength is LOW: only merge if same exact event, same headline across outlets. "
+        "Keep all sports game results, player moves, and team news as separate items. "
+        "Do not merge sports articles even if similar topic."
     )
 system_prompt = (
     "You are a Traditional Chinese news event clustering assistant. "
     "Cluster the input news items into distinct real-world events. "
     f"{dedup_instruction} "
+    "IMPORTANT: Keep all sports/game articles (CPBL, MLB, NBA, etc.) as separate items. Do NOT merge them."
     "Output JSON only."
 )
 
@@ -940,14 +957,21 @@ no_sports_rule = ""
 if not cpbl_active and program_name in ("morning-news", "evening-news"):
     no_sports_rule = "\n10. 現在不是中華職棒賽季，請勿選入任何體育新聞（category = sports）。"
 if cpbl_active and program_name in ("morning-news", "evening-news"):
+    # 賽季期間：優先選比賽結果，沒有則減量，不得用軟性新聞補位
     sports_rule = """
-10. 今日為中華職棒賽季期間，請額外加選1則體育新聞（category = sports）：
-    - 優先選「中信兄弟」相關新聞（比賽結果、選手動態等）
-    - 若找不到中信兄弟新聞，則選其他 CPBL 球隊新聞
-    - 因此本次共需選出比平時多1則（含體育共 {candidate_count_plus1} 則）""".format(
-        candidate_count_plus1=candidate_count + 1
+10. 今日為中華職棒賽季期間，體育新聞規則（**嚴格遵守**）：
+    CPBL（中華職棒）：
+    - 請選 2 則有**具體比分**的賽事報導（例：「X隊 N:M 擊敗 Y隊」、「某球員轟出全壘打」、「再見安打」、「勝投」等）。
+    - **若搜尋結果中有比分的 CPBL 新聞不足 2 則，選 0 或 1 則即可**。
+    - **嚴禁用週報、週刊、賽季分析、球員訪談或軟性故事代替比賽結果**。
+    MLB：
+    - 選 1 則有**具體比分或球員當場表現**的 MLB 賽事報導（非首頁、非聚合頁、非統計頁）。
+    - 若找不到符合條件的 MLB 新聞，可不選（勿以首頁連結代替）。
+    共通條件：所有體育新聞必須是 2 天內的。
+    因此本次最多共需選出（含體育）{candidate_count_plus2} 則，但體育篇數可依實際素材品質調減。""".format(
+        candidate_count_plus2=candidate_count + 2
     )
-    candidate_count += 1  # 賽季期間多選1則
+    candidate_count += 2  # 賽季期間多選2則（可用於放入符合條件的體育新聞）
 
 system_prompt = f"""你是台灣繁體中文新聞編輯。
 你的工作是根據搜尋結果，初選出最適合做成 {program_name} 的候選新聞。
@@ -984,6 +1008,7 @@ user_prompt = {
                 "title": "新聞標題",
                 "source": "媒體名稱",
                 "url": "https://example.com",
+                "description": "該新聞的簡短摘要（直接從原始素材中複製，幫助後續寫稿階段了解具體內容）",
                 "reason": "入選原因",
                 "category": "politics/economy/tech/society/sports/other",
                 "region": "taiwan/world"

@@ -9,12 +9,8 @@ fi
 write_script() {
   log INFO "step=write_script start"
 
-  if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
-    die "DEEPSEEK_API_KEY is empty"
-  fi
-
-  if [[ -z "${DEEPSEEK_API_URL:-}" ]]; then
-    die "DEEPSEEK_API_URL is empty"
+  if ! command -v claude &>/dev/null; then
+    die "claude CLI not found in PATH"
   fi
 
   if [[ ! -f "$CANDIDATES_FILE" ]]; then
@@ -27,8 +23,9 @@ write_script() {
 
   mkdir -p "$OUTPUT_DIR" "$COMMON_TMP_DIR"
 
-  local request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_request.json"
-  local response_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_response.json"
+  local sys_prompt_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_sys_prompt.txt"
+  local user_prompt_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_user_prompt.txt"
+  local response_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_response.txt"
   local style_name=""
   local taiwan_count=""
   local world_count=""
@@ -61,14 +58,14 @@ write_script() {
       ;;
   esac
 
-  python3 - <<'PY' "$CANDIDATES_FILE" "$request_file" "$DEEPSEEK_MODEL" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}" "${STOCK_DATA_FILE:-}"
+  python3 - <<'PY' "$CANDIDATES_FILE" "$sys_prompt_file" "$user_prompt_file" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}" "${STOCK_DATA_FILE:-}"
 import json
 import sys
 from pathlib import Path
 
 candidates_file = Path(sys.argv[1])
-request_file = Path(sys.argv[2])
-model_name = sys.argv[3]
+sys_prompt_file = Path(sys.argv[2])
+user_prompt_file = Path(sys.argv[3])
 news_count = int(sys.argv[4])
 script_target_chars = int(sys.argv[5])
 program_name = sys.argv[6]
@@ -142,16 +139,21 @@ system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰
 5. 其中台灣新聞約 {taiwan_count} 則，國際新聞約 {world_count} 則。
 6. 避免重複主題，特別是同一國際事件不要選太多相近角度。
 7. {selection_priority}
-8. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。
-9. 播報稿長度目標約 {script_target_chars} 字。
-10. 播報稿開頭第一句必須固定為：「{opening_sentence}」，之後各則新聞自然轉場，最後有結尾。
-11. 不要使用條列式，不要寫成新聞稿腔，要像主持人在自然播報。
-12. 數字一律以中文書寫。年份讀成逐字（如 2026 -> 二零二六年），數量讀成口語（如 300億 -> 三百億，3.5% -> 百分之三點五）。
-13. 英文縮寫若有公認中文名稱，一律使用中文名（如 NVIDIA -> 輝達、Google -> 谷歌、Microsoft -> 微軟、Apple -> 蘋果）。
-14. 英文縮寫若可展開翻譯，則翻譯（如 GDP -> 國內生產毛額、AI -> 人工智慧）。
-15. 品牌名若無固定中文名（如 OpenAI），首次出現時以描述性中文帶出（如「美國人工智慧新創公司」），後續以「該公司」或「該平台」代稱，避免重複出現英文。
-16. 播報稿最終不得包含任何英文字母或阿拉伯數字。
-17. 只輸出 JSON，不要有任何額外說明文字。{topic_rule}{stock_context}
+8. 必須包含至少1則當日的財經/股市新聞（category = economy），例如台股動向、國際財經等。如果候選名單中有當日財經新聞，務必選入。
+9. 體育新聞（category = sports）：如果候選名單中有中華職棒（CPBL）新聞，必須選入至少2則；如果有 MLB 新聞，必須選入至少1則。所有體育新聞必須是近期（3天內）的比賽結果、球員動態，不接受舊聞或花絮。
+10. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。
+11. 播報稿長度目標約 {script_target_chars} 字。
+12. 播報稿開頭第一句必須固定為：「{opening_sentence}」，之後各則新聞自然轉場，最後有結尾。
+13. 不要使用條列式，不要寫成新聞稿腔，要像主持人在自然播報。
+14. 只報導事實，不添加主觀評論。每則新聞只需陳述發生了什麼事，不需要說「值得關注」、「引發討論」、「令人擔憂」、「可以追蹤」、「值得留意」這類帶有判斷的用語。不要使用「有分析指出」、「專家表示」、「市場解讀為」這類空洞來源。
+15. 每則新聞必須包含具體事實：人名、數字、金額、比分、時間、地點，不能只寫模糊的概況。例如不要寫「台積電股價有變動」，要寫「台積電股價下跌百分之三點一，收在新台幣八百五十元」。不要寫「某場比賽結果出爐」，要寫「中信兄弟以五比三擊敗統一獅」。不要寫「政府推動某項政策」，要寫「行政院宣布將最低工資調漲至新台幣兩萬八千元，自七月起實施」。如果候選新聞素材本身缺乏具體數據，請根據素材中的描述進行合理的具體化，而非空泛帶過。
+15. 數字一律以中文書寫。年份讀成逐字（如 2026 -> 二零二六年），數量讀成口語（如 300億 -> 三百億，3.5% -> 百分之三點五）。
+16. 英文縮寫若有公認中文名稱，一律使用中文名（如 NVIDIA -> 輝達、Google -> 谷歌、Microsoft -> 微軟、Apple -> 蘋果）。
+17. 英文縮寫若可展開翻譯，則翻譯（如 GDP -> 國內生產毛額、AI -> 人工智慧）。
+18. 品牌名若無固定中文名（如 OpenAI），首次出現時以描述性中文帶出（如「美國人工智慧新創公司」），後續以「該公司」或「該平台」代稱，避免重複出現英文。
+19. 播報稿最終不得包含任何英文字母或阿拉伯數字。
+20. 在提及政治人物時，必須使用正確的現任頭銜。例如川普是現任美國總統，不得稱為「前總統」；賴清德是現任台灣總統（或稱台灣總統），不得稱為「副總統」。
+21. 只輸出 JSON，不要有任何額外說明文字。{topic_rule}{stock_context}
 
 輸出 JSON 格式如下：
 {{
@@ -188,37 +190,45 @@ user_payload = {
     "candidates": candidates
 }
 
-payload = {
-    "model": model_name,
-    "temperature": 0.5,
-    "messages": [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
-    ]
-}
-
-request_file.write_text(
-    json.dumps(payload, ensure_ascii=False, indent=2),
-    encoding="utf-8"
-)
+sys_prompt_file.write_text(system_prompt, encoding="utf-8")
+user_prompt_file.write_text(json.dumps(user_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 PY
 
-  local http_code
-  http_code="$(curl -sS \
-    -o "$response_file" \
-    -w "%{http_code}" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-    --max-time "${DEEPSEEK_WRITE_TIMEOUT:-180}" \
-    -d @"$request_file" \
-    "$DEEPSEEK_API_URL")"
+  local claude_model="${CLAUDE_WRITE_MODEL:-claude-sonnet-4-6}"
+  local claude_timeout="${CLAUDE_WRITE_TIMEOUT:-300}"
 
-  if [[ "$http_code" != "200" ]]; then
-    log ERROR "step=write_script failed http_code=$http_code"
-    if [[ -f "$response_file" ]]; then
-      log ERROR "step=write_script response=$(tr '\n' ' ' < "$response_file" | head -c 1000)"
-    fi
-    die "deepseek write_script failed"
+  log INFO "step=write_script calling claude model=$claude_model"
+
+  # 合併 system + user 成單一 message 避免 Claude Code 疊加 workspace context
+  # 前後加強制 JSON 指令，避免 Claude Code 以 coding assistant 角色回應
+  local combined_prompt_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_combined.txt"
+  {
+    printf '重要：你的整個回覆必須是一個合法的 JSON 物件，以 { 開始，以 } 結束。不得有任何說明、分析、bullet point 或 markdown。\n\n'
+    printf '<INSTRUCTIONS>\n'
+    cat "$sys_prompt_file"
+    printf '\n</INSTRUCTIONS>\n\n<DATA>\n'
+    cat "$user_prompt_file"
+    printf '\n</DATA>\n\n'
+    printf '再次強調：只輸出 JSON，不要任何其他文字。\n'
+  } > "$combined_prompt_file"
+
+  local claude_exit=0
+  timeout "$claude_timeout" claude \
+      --print \
+      --input-format text \
+      --output-format text \
+      --model "$claude_model" \
+      < "$combined_prompt_file" \
+      > "$response_file" 2>/dev/null || claude_exit=$?
+
+  if [[ $claude_exit -ne 0 ]]; then
+    log ERROR "step=write_script failed claude exit_code=$claude_exit timeout=${claude_timeout}s"
+    die "claude write_script failed"
+  fi
+
+  if [[ ! -s "$response_file" ]]; then
+    log ERROR "step=write_script claude returned empty response"
+    die "claude write_script empty response"
   fi
 
   python3 - <<'PY' "$response_file" "$SELECTED_FILE" "$SCRIPT_FILE"
@@ -231,18 +241,67 @@ response_file = Path(sys.argv[1])
 selected_file = Path(sys.argv[2])
 script_file = Path(sys.argv[3])
 
-data = json.loads(response_file.read_text(encoding="utf-8"))
-content = data["choices"][0]["message"]["content"].strip()
+content = response_file.read_text(encoding="utf-8").strip()
 
+# 先嘗試提取 ```json ... ``` 區塊
 match = re.search(r"```json\s*(\{.*\})\s*```", content, re.S)
 if match:
     content = match.group(1)
 else:
-    match = re.search(r"(\{.*\})", content, re.S)
-    if match:
-        content = match.group(1)
+    # 檢查 content 本身是否是完整 JSON 或可補救的 JSON
+    pass  # 保留原始 content
 
-parsed = json.loads(content)
+def try_parse_json(txt: str) -> dict | None:
+    # 嘗試標準解析
+    try:
+        return json.loads(txt)
+    except json.JSONDecodeError:
+        pass
+    # 嘗試補上缺少的閉合大括號
+    opens = txt.count("{")
+    closes = txt.count("}")
+    if opens > closes:
+        txt_fixed = txt + "\n" * (opens - closes) + "}" * (opens - closes)
+        try:
+            return json.loads(txt_fixed)
+        except json.JSONDecodeError:
+            pass
+    # 嘗試補上缺少的閉合引號和括號：整段 content 結尾可能只有 " 沒有 }
+    if txt.rstrip()[-1:] == '"':
+        candidate = txt + "\n}"
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    # 嘗試從 content 中提取第一個 { 到最後可見的結構
+    first_brace = txt.find("{")
+    if first_brace >= 0:
+        # 從第一個 { 開始嘗試
+        remaining = txt[first_brace:]
+        # 找最後一個 } 或 ] 或 " 作爲截斷點
+        last_close_brace = remaining.rfind("}")
+        if last_close_brace >= 0:
+            candidate = remaining[:last_close_brace+1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+        # 結尾是 " 時補 }]
+        if remaining.rstrip()[-1:] == '"':
+            # 檢查結構剩下幾個層級
+            opens_b = remaining.count("{")
+            closes_b = remaining.count("}")
+            if opens_b > closes_b:
+                candidate2 = remaining + "\n}" * (opens_b - closes_b)
+                try:
+                    return json.loads(candidate2)
+                except json.JSONDecodeError:
+                    pass
+    return None
+
+parsed = try_parse_json(content)
+if parsed is None:
+    raise ValueError(f"cannot parse JSON from content (len={len(content)}, opens={content.count('{')}, closes={content.count('}')})")
 
 selected_payload = {
     "selected": parsed.get("selected", [])
@@ -271,5 +330,5 @@ PY
   selected_size=$(stat -c%s "$SELECTED_FILE" 2>/dev/null || echo 0)
   script_size=$(stat -c%s "$SCRIPT_FILE" 2>/dev/null || echo 0)
 
-  log INFO "step=write_script done selected_file=$SELECTED_FILE selected_size_bytes=$selected_size script_file=$SCRIPT_FILE script_size_bytes=$script_size"
+  log INFO "step=write_script done model=$claude_model selected_file=$SELECTED_FILE selected_size_bytes=$selected_size script_file=$SCRIPT_FILE script_size_bytes=$script_size"
 }

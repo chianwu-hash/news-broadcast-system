@@ -140,8 +140,12 @@ get_search_queries() {
       cat <<EOF
 Taiwan news today
 Taiwan politics economy latest
+Taiwan stock market finance today
 TSMC Taiwan semiconductor news
 Taiwan society latest news
+中華職棒 最新賽況
+CPBL 2026 baseball game results
+MLB results today 2026 Ohtani
 Asia Pacific news today
 international breaking news
 EOF

@@ -1,6 +1,50 @@
 [
   {
     "program_name": "feature-news",
+    "published_at": "2026-03-24T14:52:13Z",
+    "title": "Education minister scraps some Passover camps after Iran cluster bomb hits daycare - The Times of Israel",
+    "title_norm": "educationministerscrapssomepassovercampsafteriranclusterbombhitsdaycarethetimesofisrael",
+    "url": "https://www.timesofisrael.com/education-minister-scraps-some-passover-camps-after-iran-cluster-bomb-hits-daycare/?utm_source=article_hpsidebar&utm_medium=desktop_site",
+    "url_norm": "https://www.timesofisrael.com/education-minister-scraps-some-passover-camps-after-iran-cluster-bomb-hits-daycare/?utm_source=article_hpsidebar&utm_medium=desktop_site",
+    "source": "以色列時報",
+    "category": "society",
+    "region": "world"
+  },
+  {
+    "program_name": "feature-news",
+    "published_at": "2026-03-24T14:52:13Z",
+    "title": "‘We must preserve our traditions’: war shadows Tehran as Iranians mark Nowruz - The Guardian",
+    "title_norm": "wemustpreserveourtraditionswarshadowstehranasiraniansmarknowruztheguardian",
+    "url": "https://www.theguardian.com/artanddesign/2026/mar/21/we-must-preserve-our-traditions-war-shadows-tehran-as-iranians-mark-nowruz",
+    "url_norm": "https://www.theguardian.com/artanddesign/2026/mar/21/we-must-preserve-our-traditions-war-shadows-tehran-as-iranians-mark-nowruz",
+    "source": "衛報",
+    "category": "society",
+    "region": "world"
+  },
+  {
+    "program_name": "feature-news",
+    "published_at": "2026-03-24T14:52:13Z",
+    "title": "Beverley Puppet Festival cancelled after 20 years - BBC",
+    "title_norm": "beverleypuppetfestivalcancelledafter20yearsbbc",
+    "url": "https://www.bbc.com/news/articles/cj6025ny1y5o",
+    "url_norm": "https://www.bbc.com/news/articles/cj6025ny1y5o",
+    "source": "英國廣播公司",
+    "category": "society",
+    "region": "world"
+  },
+  {
+    "program_name": "feature-news",
+    "published_at": "2026-03-24T14:52:13Z",
+    "title": "Children’s Book Council Revamps Kids Favorites Awards - Publishers Weekly",
+    "title_norm": "childrensbookcouncilrevampskidsfavoritesawardspublishersweekly",
+    "url": "https://www.publishersweekly.com/pw/by-topic/childrens/childrens-industry-news/article/99939-children-s-book-council-revamps-kids-favorites-awards.html",
+    "url_norm": "https://www.publishersweekly.com/pw/by-topic/childrens/childrens-industry-news/article/99939-children-s-book-council-revamps-kids-favorites-awards.html",
+    "source": "出版人週刊",
+    "category": "society",
+    "region": "world"
+  },
+  {
+    "program_name": "feature-news",
     "published_at": "2026-03-18T11:50:39Z",
     "title": "Sonoma Valley Schools Approve Specific Rules for AI Use",
     "title_norm": "sonomavalleyschoolsapprovespecificrulesforaiuse",
