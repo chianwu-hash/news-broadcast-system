@@ -9,8 +9,15 @@ fi
 write_script() {
   log INFO "step=write_script start"
 
-  if ! command -v claude &>/dev/null; then
-    die "claude CLI not found in PATH"
+  local _claude_bin="${CLAUDE_BIN:-}"
+  if [[ -z "$_claude_bin" ]]; then
+    _claude_bin="$(command -v claude 2>/dev/null || echo "")"
+  fi
+  if [[ -z "$_claude_bin" && -x "$HOME/.local/bin/claude" ]]; then
+    _claude_bin="$HOME/.local/bin/claude"
+  fi
+  if [[ -z "$_claude_bin" ]]; then
+    die "claude CLI not found (set CLAUDE_BIN in .env or install to ~/.local/bin/claude)"
   fi
 
   if [[ ! -f "$CANDIDATES_FILE" ]]; then
@@ -213,7 +220,7 @@ PY
   } > "$combined_prompt_file"
 
   local claude_exit=0
-  timeout "$claude_timeout" claude \
+  timeout "$claude_timeout" "$_claude_bin" \
       --print \
       --input-format text \
       --output-format text \

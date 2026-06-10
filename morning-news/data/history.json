@@ -1,6 +1,94 @@
 [
   {
     "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "Taiwan shares stage strong rebound, led by tech, financial stocks",
+    "title_norm": "taiwansharesstagestrongreboundledbytechfinancialstocks",
+    "url": "https://focustaiwan.tw/business/202606090014",
+    "url_norm": "https://focustaiwan.tw/business/202606090014",
+    "source": "Focus Taiwan",
+    "category": "economy",
+    "region": "taiwan"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "Taiwan's trade boom prompts another growth upgrade",
+    "title_norm": "taiwanstradeboompromptsanothergrowthupgrade",
+    "url": "https://think.ing.com/snaps/taiwans-trade-boom-prompts-another-growth-upgrade/",
+    "url_norm": "https://think.ing.com/snaps/taiwans-trade-boom-prompts-another-growth-upgrade",
+    "source": "ING THINK",
+    "category": "economy",
+    "region": "taiwan"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "Taiwan Moves to Criminalize AI Chip Exports to China",
+    "title_norm": "taiwanmovestocriminalizeaichipexportstochina",
+    "url": "https://coincentral.com/taiwan-semiconductor-tsm-stock-jumps-as-taiwan-moves-to-criminalize-ai-chip-exports-to-china/",
+    "url_norm": "https://coincentral.com/taiwan-semiconductor-tsm-stock-jumps-as-taiwan-moves-to-criminalize-ai-chip-exports-to-china",
+    "source": "CoinCentral",
+    "category": "tech",
+    "region": "taiwan"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "TSMC Doubles Market Cap, Secures Top 10 Spot",
+    "title_norm": "tsmcdoublesmarketcapsecurestop10spot",
+    "url": "https://www.newkerala.com/news/a/taiwan-semiconductor-manufacturing-co-doubles-market-cap-enters-301.htm",
+    "url_norm": "https://www.newkerala.com/news/a/taiwan-semiconductor-manufacturing-co-doubles-market-cap-enters-301.htm",
+    "source": "New Kerala",
+    "category": "tech",
+    "region": "taiwan"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "China bans four New Zealand MPs over Taiwan visit",
+    "title_norm": "chinabansfournewzealandmpsovertaiwanvisit",
+    "url": "https://www.bbc.co.uk/news/world/asia/china",
+    "url_norm": "https://www.bbc.co.uk/news/world/asia/china",
+    "source": "BBC",
+    "category": "politics",
+    "region": "taiwan"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "MPs plan Taiwan trip",
+    "title_norm": "mpsplantaiwantrip",
+    "url": "https://www.winnipegsun.com/national-news/in-the-news-today-mps-plan-taiwan-trip-b-c-hantavirus-recovery-energy-show-begins/article_752a562a-011d-5112-801c-4c72121040de.html",
+    "url_norm": "https://www.winnipegsun.com/national-news/in-the-news-today-mps-plan-taiwan-trip-b-c-hantavirus-recovery-energy-show-begins/article_752a562a-011d-5112-801c-4c72121040de.html",
+    "source": "Winnipeg Sun",
+    "category": "politics",
+    "region": "world"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "The Taiwan crisis no-one saw coming, and it has nothing to do with war",
+    "title_norm": "thetaiwancrisisnoonesawcomingandithasnothingtodowithwar",
+    "url": "https://www.abc.net.au/news/2026-06-09/taiwan-artificial-intelligence-china-japan-nvidia/106772162",
+    "url_norm": "https://www.abc.net.au/news/2026-06-09/taiwan-artificial-intelligence-china-japan-nvidia/106772162",
+    "source": "ABC News",
+    "category": "other",
+    "region": "world"
+  },
+  {
+    "program_name": "morning-news",
+    "published_at": "2026-06-10T14:23:13Z",
+    "title": "中職搶先報／兄弟力拚3連勝！推菲力士戰台鋼 天氣狀況恐不樂觀",
+    "title_norm": "中職搶先報兄弟力拚3連勝推菲力士戰台鋼天氣狀況恐不樂觀",
+    "url": "https://www.nownews.com/news/6844789",
+    "url_norm": "https://www.nownews.com/news/6844789",
+    "source": "NOWnews",
+    "category": "sports",
+    "region": "taiwan"
+  },
+  {
+    "program_name": "morning-news",
     "published_at": "2026-06-08T23:02:15Z",
     "title": "Taiwan in tsunami threat zone after major earthquake in Philippines - Taipei Times",
     "title_norm": "taiwanintsunamithreatzoneaftermajorearthquakeinphilippinestaipeitimes",
