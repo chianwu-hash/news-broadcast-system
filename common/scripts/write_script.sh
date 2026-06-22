@@ -9,17 +9,6 @@ fi
 write_script() {
   log INFO "step=write_script start"
 
-  local _claude_bin="${CLAUDE_BIN:-}"
-  if [[ -z "$_claude_bin" ]]; then
-    _claude_bin="$(command -v claude 2>/dev/null || echo "")"
-  fi
-  if [[ -z "$_claude_bin" && -x "$HOME/.local/bin/claude" ]]; then
-    _claude_bin="$HOME/.local/bin/claude"
-  fi
-  if [[ -z "$_claude_bin" ]]; then
-    die "claude CLI not found (set CLAUDE_BIN in .env or install to ~/.local/bin/claude)"
-  fi
-
   if [[ ! -f "$CANDIDATES_FILE" ]]; then
     die "candidates file not found: $CANDIDATES_FILE"
   fi
@@ -67,6 +56,7 @@ write_script() {
 
   python3 - <<'PY' "$CANDIDATES_FILE" "$sys_prompt_file" "$user_prompt_file" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}" "${STOCK_DATA_FILE:-}"
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -147,8 +137,8 @@ system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰
 6. 避免重複主題，特別是同一國際事件不要選太多相近角度。
 7. {selection_priority}
 8. 必須包含至少1則當日的財經/股市新聞（category = economy），例如台股動向、國際財經等。如果候選名單中有當日財經新聞，務必選入。
-9. 體育新聞（category = sports）：如果候選名單中有中華職棒（CPBL）新聞，必須選入至少2則；如果有 MLB 新聞，必須選入至少1則。所有體育新聞必須是近期（3天內）的比賽結果、球員動態，不接受舊聞或花絮。
-10. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。
+9. 體育新聞（category = sports）：{"早安新聞以 MLB 為主（美國賽事在台灣早上出結果），如有 MLB 新聞必須選入至少1則；CPBL 若有昨日賽果可選1則。" if program_name == "morning-news" else "晚安新聞以 CPBL 為主（中華職棒當日賽事結果），如有 CPBL 新聞必須選入至少2則；MLB 若有重大表現可選1則。" if program_name == "evening-news" else "如有體育新聞可適量選入。"}所有體育新聞必須是近期（3天內）的比賽結果、球員動態，不接受舊聞或花絮。
+10. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。同一家公司或同一個主題最多選 2 則，避免過度集中。
 11. 播報稿長度目標約 {script_target_chars} 字。
 12. 播報稿開頭第一句必須固定為：「{opening_sentence}」，之後各則新聞自然轉場，最後有結尾。
 13. 不要使用條列式，不要寫成新聞稿腔，要像主持人在自然播報。
@@ -199,43 +189,47 @@ user_payload = {
 
 sys_prompt_file.write_text(system_prompt, encoding="utf-8")
 user_prompt_file.write_text(json.dumps(user_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+request_file = Path(sys.argv[2]).parent / f"{program_name}_write_script_request.json"
+payload = {
+    "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+    "temperature": 0.3,
+    "messages": [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
+    ]
+}
+request_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 PY
 
-  local claude_model="${CLAUDE_WRITE_MODEL:-claude-sonnet-4-6}"
-  local claude_timeout="${CLAUDE_WRITE_TIMEOUT:-300}"
+  local deepseek_model="${DEEPSEEK_MODEL:-deepseek-chat}"
+  local deepseek_timeout="${DEEPSEEK_WRITE_TIMEOUT:-120}"
+  local request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_request.json"
 
-  log INFO "step=write_script calling claude model=$claude_model"
+  log INFO "step=write_script calling deepseek model=$deepseek_model"
 
-  # 合併 system + user 成單一 message 避免 Claude Code 疊加 workspace context
-  # 前後加強制 JSON 指令，避免 Claude Code 以 coding assistant 角色回應
-  local combined_prompt_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_combined.txt"
-  {
-    printf '重要：你的整個回覆必須是一個合法的 JSON 物件，以 { 開始，以 } 結束。不得有任何說明、分析、bullet point 或 markdown。\n\n'
-    printf '<INSTRUCTIONS>\n'
-    cat "$sys_prompt_file"
-    printf '\n</INSTRUCTIONS>\n\n<DATA>\n'
-    cat "$user_prompt_file"
-    printf '\n</DATA>\n\n'
-    printf '再次強調：只輸出 JSON，不要任何其他文字。\n'
-  } > "$combined_prompt_file"
+  local http_code
+  http_code="$(curl -sS \
+    -o "$response_file" \
+    -w "%{http_code}" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+    --max-time "$deepseek_timeout" \
+    -d @"$request_file" \
+    "$DEEPSEEK_API_URL" || true)"
 
-  local claude_exit=0
-  timeout "$claude_timeout" "$_claude_bin" \
-      --print \
-      --input-format text \
-      --output-format text \
-      --model "$claude_model" \
-      < "$combined_prompt_file" \
-      > "$response_file" 2>/dev/null || claude_exit=$?
+  if ! [[ "$http_code" =~ ^[0-9]{3}$ ]]; then
+    http_code="000"
+  fi
 
-  if [[ $claude_exit -ne 0 ]]; then
-    log ERROR "step=write_script failed claude exit_code=$claude_exit timeout=${claude_timeout}s"
-    die "claude write_script failed"
+  if [[ "$http_code" != "200" ]]; then
+    log ERROR "step=write_script failed http_code=$http_code timeout=${deepseek_timeout}s"
+    die "deepseek write_script failed (http $http_code)"
   fi
 
   if [[ ! -s "$response_file" ]]; then
-    log ERROR "step=write_script claude returned empty response"
-    die "claude write_script empty response"
+    log ERROR "step=write_script deepseek returned empty response"
+    die "deepseek write_script empty response"
   fi
 
   python3 - <<'PY' "$response_file" "$SELECTED_FILE" "$SCRIPT_FILE"
@@ -248,15 +242,12 @@ response_file = Path(sys.argv[1])
 selected_file = Path(sys.argv[2])
 script_file = Path(sys.argv[3])
 
-content = response_file.read_text(encoding="utf-8").strip()
+data = json.loads(response_file.read_text(encoding="utf-8"))
+content = data["choices"][0]["message"]["content"].strip()
 
-# 先嘗試提取 ```json ... ``` 區塊
 match = re.search(r"```json\s*(\{.*\})\s*```", content, re.S)
 if match:
     content = match.group(1)
-else:
-    # 檢查 content 本身是否是完整 JSON 或可補救的 JSON
-    pass  # 保留原始 content
 
 def try_parse_json(txt: str) -> dict | None:
     # 嘗試標準解析
@@ -334,8 +325,17 @@ PY
 
   local selected_size
   local script_size
+  local script_chars
   selected_size=$(stat -c%s "$SELECTED_FILE" 2>/dev/null || echo 0)
   script_size=$(stat -c%s "$SCRIPT_FILE" 2>/dev/null || echo 0)
+  script_chars=$(wc -m < "$SCRIPT_FILE" 2>/dev/null || echo 0)
+  script_chars=$((script_chars))
 
-  log INFO "step=write_script done model=$claude_model selected_file=$SELECTED_FILE selected_size_bytes=$selected_size script_file=$SCRIPT_FILE script_size_bytes=$script_size"
+  local target_chars="${SCRIPT_TARGET_CHARS:-2000}"
+  local min_chars=$(( target_chars * 70 / 100 ))
+  if [[ $script_chars -lt $min_chars ]]; then
+    log WARN "step=write_script script_too_short chars=$script_chars target=$target_chars min_threshold=$min_chars"
+  fi
+
+  log INFO "step=write_script done model=$deepseek_model script_chars=$script_chars target=$target_chars selected_file=$SELECTED_FILE selected_size_bytes=$selected_size script_file=$SCRIPT_FILE script_size_bytes=$script_size"
 }

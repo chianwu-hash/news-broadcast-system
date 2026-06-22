@@ -349,6 +349,21 @@ if history_file and history_file.exists():
     except Exception:
         history_entries = []
 
+# 跨節目去重：載入其他節目的 history.json
+sibling_shows = ["morning-news", "evening-news", "feature-news"]
+if history_file:
+    project_root = history_file.parent.parent.parent
+    for show in sibling_shows:
+        sibling_path = project_root / show / "data" / "history.json"
+        if sibling_path == history_file or not sibling_path.exists():
+            continue
+        try:
+            sibling_data = json.loads(sibling_path.read_text(encoding="utf-8"))
+            if isinstance(sibling_data, list):
+                history_entries.extend(sibling_data)
+        except Exception:
+            pass
+
 history_cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, history_lookback_days))
 freshness_cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, news_max_age_days))
 current_year = datetime.now(timezone.utc).year
@@ -379,8 +394,7 @@ def looks_like_non_article(url: str, title: str, desc: str) -> bool:
     bad_path_patterns = [
         r"^/search/.*",
         r"^/world/total$",
-        r"^/realtimenews$",
-        r"^/realtimenews/$",
+        r"^/realtimenews/?$",
         r"^/business/?$",
         r"^/live/?$",
         r"^/news/?$",
@@ -388,6 +402,15 @@ def looks_like_non_article(url: str, title: str, desc: str) -> bool:
         r"^/international/?$",
         r"^/hk/news/index\.html$",
         r"^/hk/intnews/index\.html$",
+        r"^/world/[a-z-]+/?$",
+        r"^/news/[a-z-]+/?$",
+        r"^/news/world/[a-z-]+/?$",
+        r"^/[a-z-]+stock/?$",
+        r"^/[a-z-]+/latest/?$",
+        r"^/[a-z-]+/headlines/?$",
+        r"^/topics?/[a-z-]+/?$",
+        r"^/tag/[a-z-]+/?$",
+        r"^/category/[a-z-]+/?$",
     ]
     for pat in bad_path_patterns:
         if re.search(pat, path, re.I):
@@ -400,6 +423,9 @@ def looks_like_non_article(url: str, title: str, desc: str) -> bool:
         r"home",
         r"breaking international news",
         r"latest news",
+        r"^[\w\s]+ news\s*\|",
+        r"latest headlines",
+        r"頭條新聞",
     ]
     title_lower = (title or "").strip().lower()
     desc_lower = (desc or "").strip().lower()
@@ -409,7 +435,7 @@ def looks_like_non_article(url: str, title: str, desc: str) -> bool:
 
     for pat in generic_title_patterns:
         if re.search(pat, title, re.I):
-            if len(path.strip("/").split("/")) <= 1:
+            if len(path.strip("/").split("/")) <= 2:
                 return True
 
     generic_desc_patterns = [
@@ -479,7 +505,8 @@ for block in results:
             continue
 
         dedupe_key = (title, normalize_url(url))
-        if dedupe_key in seen:
+        title_dedupe_key = normalize_title(title)
+        if dedupe_key in seen or (title_dedupe_key and title_dedupe_key in seen):
             stats["filtered_duplicate"] += 1
             continue
 
@@ -505,6 +532,8 @@ for block in results:
                 continue
 
         seen.add(dedupe_key)
+        if title_dedupe_key:
+            seen.add(title_dedupe_key)
 
         items.append({
             "query": query,
@@ -956,22 +985,34 @@ sports_rule = ""
 no_sports_rule = ""
 if not cpbl_active and program_name in ("morning-news", "evening-news"):
     no_sports_rule = "\n10. 現在不是中華職棒賽季，請勿選入任何體育新聞（category = sports）。"
-if cpbl_active and program_name in ("morning-news", "evening-news"):
-    # 賽季期間：優先選比賽結果，沒有則減量，不得用軟性新聞補位
+if cpbl_active and program_name == "morning-news":
     sports_rule = """
 10. 今日為中華職棒賽季期間，體育新聞規則（**嚴格遵守**）：
-    CPBL（中華職棒）：
-    - 請選 2 則有**具體比分**的賽事報導（例：「X隊 N:M 擊敗 Y隊」、「某球員轟出全壘打」、「再見安打」、「勝投」等）。
-    - **若搜尋結果中有比分的 CPBL 新聞不足 2 則，選 0 或 1 則即可**。
-    - **嚴禁用週報、週刊、賽季分析、球員訪談或軟性故事代替比賽結果**。
-    MLB：
-    - 選 1 則有**具體比分或球員當場表現**的 MLB 賽事報導（非首頁、非聚合頁、非統計頁）。
+    MLB（時區配合：美國賽事在台灣早上出結果）：
+    - 請選 1-2 則有**具體比分或球員當場表現**的 MLB 賽事報導（非首頁、非聚合頁、非統計頁）。
     - 若找不到符合條件的 MLB 新聞，可不選（勿以首頁連結代替）。
+    CPBL（中華職棒）：
+    - 若有**昨日賽事比分**的報導可選 1 則，但 MLB 優先。
+    - **嚴禁用週報、週刊、賽季分析、球員訪談或軟性故事代替比賽結果**。
     共通條件：所有體育新聞必須是 2 天內的。
     因此本次最多共需選出（含體育）{candidate_count_plus2} 則，但體育篇數可依實際素材品質調減。""".format(
         candidate_count_plus2=candidate_count + 2
     )
-    candidate_count += 2  # 賽季期間多選2則（可用於放入符合條件的體育新聞）
+    candidate_count += 2
+if cpbl_active and program_name == "evening-news":
+    sports_rule = """
+10. 今日為中華職棒賽季期間，體育新聞規則（**嚴格遵守**）：
+    CPBL（中華職棒，時區配合：台灣晚間出今日賽果）：
+    - 請選 2 則有**具體比分**的賽事報導（例：「X隊 N:M 擊敗 Y隊」、「某球員轟出全壘打」、「再見安打」、「勝投」等）。
+    - **若搜尋結果中有比分的 CPBL 新聞不足 2 則，選 0 或 1 則即可**。
+    - **嚴禁用週報、週刊、賽季分析、球員訪談或軟性故事代替比賽結果**。
+    MLB：
+    - 若有昨日 MLB 重大表現可選 1 則，但 CPBL 優先。
+    共通條件：所有體育新聞必須是 2 天內的。
+    因此本次最多共需選出（含體育）{candidate_count_plus2} 則，但體育篇數可依實際素材品質調減。""".format(
+        candidate_count_plus2=candidate_count + 2
+    )
+    candidate_count += 2
 
 system_prompt = f"""你是台灣繁體中文新聞編輯。
 你的工作是根據搜尋結果，初選出最適合做成 {program_name} 的候選新聞。
@@ -993,6 +1034,7 @@ system_prompt = f"""你是台灣繁體中文新聞編輯。
    - reason
    - category（politics/economy/tech/society/sports/other）
    - region（taiwan/world）{category_rules}{sports_rule}{no_sports_rule}
+11. 同一家公司或同一個主題最多選 2 則，避免過度集中（例如不要選 3 則以上台積電相關新聞）。
 """
 
 user_prompt = {

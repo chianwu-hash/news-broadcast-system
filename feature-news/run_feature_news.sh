@@ -23,11 +23,8 @@ FEATURE_TOPIC="${1:-${FEATURE_TOPIC:-}}"
 export FEATURE_TOPIC
 FEATURE_TEXT_ONLY_MODE="${FEATURE_TEXT_ONLY_MODE:-1}"
 
-# 隨機挑選主播
-_anchors=("小蝦:zh-TW-HsiaoChenNeural" "小鯨:zh-TW-YunJheNeural" "小貝:zh-TW-HsiaoYuNeural")
-_pick="${_anchors[$((RANDOM % 3))]}"
-FEATURE_STYLE_NAME="${_pick%%:*}"
-TTS_VOICE="${_pick##*:}"
+FEATURE_STYLE_NAME="小蝦"
+TTS_VOICE="zh-TW-HsiaoChenNeural"
 export FEATURE_STYLE_NAME TTS_VOICE
 
 send_selected_sources_summary() {

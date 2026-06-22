@@ -20,11 +20,8 @@ fi
 
 START_TS=$(date +%s)
 
-# 隨機挑選主播
-_anchors=("小蝦:zh-TW-HsiaoChenNeural" "小鯨:zh-TW-YunJheNeural" "小貝:zh-TW-HsiaoYuNeural")
-_pick="${_anchors[$((RANDOM % 3))]}"
-EVENING_STYLE_NAME="${_pick%%:*}"
-TTS_VOICE="${_pick##*:}"
+EVENING_STYLE_NAME="小蝦"
+TTS_VOICE="zh-TW-HsiaoChenNeural"
 export EVENING_STYLE_NAME TTS_VOICE
 
 # 動態檔名：YYYYMMDD-晚安新聞.mp3
