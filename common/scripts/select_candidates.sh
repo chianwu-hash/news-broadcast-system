@@ -1069,7 +1069,7 @@ user_prompt = {
                 "title": "新聞標題",
                 "source": "媒體名稱",
                 "url": "https://example.com",
-                "description": "該新聞的簡短摘要（直接從原始素材中複製，幫助後續寫稿階段了解具體內容）",
+                "description": "必須原封不動複製 items 中該筆的 description 欄位，禁止改寫、摘要或重新措辭",
                 "reason": "入選原因",
                 "category": "politics/economy/tech/society/sports/other",
                 "region": "taiwan/world"
@@ -1154,14 +1154,16 @@ PY
     return 0
   fi
 
-  python3 - <<'PY' "$response_file" "$CANDIDATES_FILE"
+  python3 - <<'PY' "$response_file" "$CANDIDATES_FILE" "$prepared_file"
 import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 response_file = Path(sys.argv[1])
 candidates_file = Path(sys.argv[2])
+prepared_file = Path(sys.argv[3])
 
 data = json.loads(response_file.read_text(encoding="utf-8"))
 content = data["choices"][0]["message"]["content"].strip()
@@ -1175,6 +1177,30 @@ else:
         content = match.group(1)
 
 parsed = json.loads(content)
+
+def norm_url(u):
+    p = urlparse(u.strip().rstrip("/"))
+    return urlunparse((p.scheme, p.netloc.lower(), p.path.rstrip("/"), "", "", ""))
+
+prepared = json.loads(prepared_file.read_text(encoding="utf-8"))
+orig_descs = {}
+for item in prepared.get("items", []):
+    url = item.get("url", "")
+    desc = item.get("description", "")
+    if url and desc:
+        orig_descs[norm_url(url)] = desc
+
+import html as _html
+
+def clean_html(text):
+    text = re.sub(r"<[^>]+>", "", text)
+    return _html.unescape(text).strip()
+
+for cand in parsed.get("candidates", []):
+    url = cand.get("url", "")
+    key = norm_url(url)
+    if key in orig_descs:
+        cand["description"] = clean_html(orig_descs[key])
 
 candidates_file.write_text(
     json.dumps(parsed, ensure_ascii=False, indent=2),
