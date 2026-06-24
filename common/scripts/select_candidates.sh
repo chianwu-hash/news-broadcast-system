@@ -411,9 +411,23 @@ def looks_like_non_article(url: str, title: str, desc: str) -> bool:
         r"^/topics?/[a-z-]+/?$",
         r"^/tag/[a-z-]+/?$",
         r"^/category/[a-z-]+/?$",
+        r"/editorials?/",
+        r"/opinions?/",
+        r"/op-ed/",
+        r"/commentary/",
+        r"/columns?/",
     ]
     for pat in bad_path_patterns:
         if re.search(pat, path, re.I):
+            return True
+
+    # 股票個股頁面（無文章內容，只有即時報價）
+    stock_page_patterns = [
+        r"^/stocks/[A-Z]+/[A-Z]+/?$",
+        r"/stock-price.*\$[A-Z]+",
+    ]
+    for pat in stock_page_patterns:
+        if re.search(pat, url, re.I):
             return True
 
     generic_title_patterns = [
@@ -426,6 +440,11 @@ def looks_like_non_article(url: str, title: str, desc: str) -> bool:
         r"^[\w\s]+ news\s*\|",
         r"latest headlines",
         r"頭條新聞",
+        r"^EDITORIAL:",
+        r"^OPINION:",
+        r"^社論[：:]",
+        r"^投書[：:]",
+        r"Stock Price, News & Analysis",
     ]
     title_lower = (title or "").strip().lower()
     desc_lower = (desc or "").strip().lower()
