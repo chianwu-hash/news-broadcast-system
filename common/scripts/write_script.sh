@@ -135,8 +135,8 @@ system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰
 5. 其中台灣新聞約 {taiwan_count} 則，國際新聞約 {world_count} 則。
 6. 避免重複主題，特別是同一國際事件不要選太多相近角度。
 7. {selection_priority}
-8. 必須包含至少1則當日的財經/股市新聞（category = economy），例如台股動向、國際財經等。如果候選名單中有當日財經新聞，務必選入。
-9. 體育新聞（category = sports）：{"早安新聞以 MLB 為主（美國賽事在台灣早上出結果），如有 MLB 新聞必須選入至少1則；CPBL 若有昨日賽果可選1則。" if program_name == "morning-news" else "晚安新聞以 CPBL 為主（中華職棒當日賽事結果），如有 CPBL 新聞必須選入至少2則；MLB 若有重大表現可選1則。" if program_name == "evening-news" else "如有體育新聞可適量選入。"}所有體育新聞必須是近期（3天內）的比賽結果、球員動態，不接受舊聞或花絮。
+8. 財經股市新聞（category = economy）：{"早安新聞報美股（NYSE 凌晨收盤結果）、華爾街動態、國際財經。台股留給晚安新聞，早安不報台股。" if program_name == "morning-news" else "晚安新聞報台股收盤、台積電、台灣財經。美股留給早安新聞，晚安不報美股。" if program_name == "evening-news" else "如有財經新聞可適量選入。"}必須選入至少1則財經新聞。
+9. 體育新聞（category = sports）：{"早安新聞報 CPBL 中華職棒（昨晚台灣賽事結果），如有 CPBL 新聞必須選入至少2則。早安不報 MLB，MLB 留給晚安新聞。" if program_name == "morning-news" else "晚安新聞報 MLB 美國職棒（美國昨晚賽事結果），特別關注道奇隊與大谷翔平，如有 MLB 新聞必須選入至少1則。晚安不報 CPBL，CPBL 留給早安新聞。" if program_name == "evening-news" else "如有體育新聞可適量選入。"}所有體育新聞必須是近期（3天內）的比賽結果、球員動態，不接受舊聞或花絮。
 10. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。同一家公司或同一個主題最多選 2 則，避免過度集中。
 11. 播報稿長度目標約 {script_target_chars} 字。
 12. 播報稿開頭第一句必須固定為：「{opening_sentence}」，之後各則新聞自然轉場，最後有結尾。

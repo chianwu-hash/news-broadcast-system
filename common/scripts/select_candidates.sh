@@ -987,7 +987,7 @@ if program_name == "morning-news":
 9. 新聞分類配額（請盡量均衡分配，各佔1則）：
    - 國際（world）：1則
    - 政治（politics）：1則
-   - 財經或科技（economy/tech）：1則，兩者輪替，優先選當天最重要的
+   - 財經（economy）：1則，早安新聞優先選美股/華爾街/國際財經（NYSE 凌晨收盤結果），台股留給晚安新聞
    - 社會或民生（society）：1則
    - 軟性（教育/健康/環境/文化，category 填 other）：1則"""
 elif program_name == "evening-news":
@@ -996,7 +996,7 @@ elif program_name == "evening-news":
 9. 新聞分類配額（請盡量均衡分配，各佔1則）：
    - 國際（world）：1則
    - 政治（politics）：1則
-   - 財經或科技（economy/tech）：1則，兩者輪替，優先選當天最重要的
+   - 財經（economy）：1-2則，晚安新聞優先選台股/台積電/台灣財經（TWSE 下午收盤結果），美股留給早安新聞
    - 社會或民生（society）：1則
    - 軟性（教育/健康/環境/文化，category 填 other）：1則"""
 else:
@@ -1011,12 +1011,11 @@ if not cpbl_active and program_name in ("morning-news", "evening-news"):
 if cpbl_active and program_name == "morning-news":
     sports_rule = """
 10. 今日為中華職棒賽季期間，體育新聞規則（**嚴格遵守**）：
-    MLB（時區配合：美國賽事在台灣早上出結果）：
-    - 請選 1-2 則有**具體比分或球員當場表現**的 MLB 賽事報導（非首頁、非聚合頁、非統計頁）。
-    - 若找不到符合條件的 MLB 新聞，可不選（勿以首頁連結代替）。
-    CPBL（中華職棒）：
-    - 若有**昨日賽事比分**的報導可選 1 則，但 MLB 優先。
+    CPBL（中華職棒，時區配合：昨晚台灣賽事今早報導）：
+    - 請選 2 則有**具體比分**的賽事報導（例：「X隊 N:M 擊敗 Y隊」、「某球員轟出全壘打」、「再見安打」、「勝投」等）。
+    - **若搜尋結果中有比分的 CPBL 新聞不足 2 則，選 0 或 1 則即可**。
     - **嚴禁用週報、週刊、賽季分析、球員訪談或軟性故事代替比賽結果**。
+    早安新聞不報 MLB，MLB 留給晚安新聞。
     共通條件：所有體育新聞必須是 2 天內的。
     因此本次最多共需選出（含體育）{candidate_count_plus2} 則，但體育篇數可依實際素材品質調減。""".format(
         candidate_count_plus2=candidate_count + 2
@@ -1025,12 +1024,12 @@ if cpbl_active and program_name == "morning-news":
 if cpbl_active and program_name == "evening-news":
     sports_rule = """
 10. 今日為中華職棒賽季期間，體育新聞規則（**嚴格遵守**）：
-    CPBL（中華職棒，時區配合：台灣晚間出今日賽果）：
-    - 請選 2 則有**具體比分**的賽事報導（例：「X隊 N:M 擊敗 Y隊」、「某球員轟出全壘打」、「再見安打」、「勝投」等）。
-    - **若搜尋結果中有比分的 CPBL 新聞不足 2 則，選 0 或 1 則即可**。
+    MLB（時區配合：美國昨晚賽事台灣今天報導），特別關注道奇隊與大谷翔平：
+    - 請選 1-2 則有**具體比分或球員當場表現**的 MLB 賽事報導（非首頁、非聚合頁、非統計頁）。
+    - 優先選道奇隊或大谷翔平相關賽事。
+    - 若找不到符合條件的 MLB 新聞，可不選（勿以首頁連結代替）。
     - **嚴禁用週報、週刊、賽季分析、球員訪談或軟性故事代替比賽結果**。
-    MLB：
-    - 若有昨日 MLB 重大表現可選 1 則，但 CPBL 優先。
+    晚安新聞不報 CPBL，CPBL 留給早安新聞。
     共通條件：所有體育新聞必須是 2 天內的。
     因此本次最多共需選出（含體育）{candidate_count_plus2} 則，但體育篇數可依實際素材品質調減。""".format(
         candidate_count_plus2=candidate_count + 2
