@@ -319,6 +319,7 @@ search_news() {
 
   local query
   local idx=0
+  local _brave_failed=0
 
   while IFS= read -r query; do
     [[ -z "$query" ]] && continue
@@ -346,16 +347,20 @@ search_news() {
     http_code="$(curl -sS \
       -H "Accept: application/json" \
       -H "X-Subscription-Token: $BRAVE_API_KEY" \
+      --max-time "${BRAVE_SEARCH_TIMEOUT:-30}" \
+      --connect-timeout 10 \
       -o "$response_file" \
       -w "%{http_code}" \
-      "$url")"
+      "$url" || true)"
+
+    if ! [[ "$http_code" =~ ^[0-9]{3}$ ]]; then
+      http_code="000"
+    fi
 
     if [[ "$http_code" != "200" ]]; then
-      log ERROR "step=search_news query_$idx failed http_code=$http_code"
-      if [[ -f "$response_file" ]]; then
-        log ERROR "step=search_news query_$idx response=$(tr '\n' ' ' < "$response_file" | head -c 500)"
-      fi
-      die "brave search failed for query_$idx"
+      log WARN "step=search_news query_$idx failed http_code=$http_code (will try fallback)"
+      _brave_failed=1
+      break
     fi
 
     python3 - <<'PY' "$response_file" "$query" "$idx" >> "$TMP_JSONL"
@@ -378,6 +383,16 @@ PY
 
     log INFO "step=search_news query_$idx done"
   done < <(get_search_queries)
+
+  if [[ "$_brave_failed" -eq 1 ]]; then
+    if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+      log WARN "step=search_news brave failed, fallback to tavily"
+      _search_news_tavily
+      return
+    else
+      die "brave search failed and TAVILY_API_KEY is empty (no fallback)"
+    fi
+  fi
 
   python3 - <<'PY' "$TMP_JSONL" "$RAW_SEARCH_FILE" "$PROGRAM_NAME" "${FEATURE_SCOPE_DETECTED:-}" "${FEATURE_PROFILE_DETECTED:-}"
 import json
