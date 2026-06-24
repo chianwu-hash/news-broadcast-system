@@ -56,7 +56,6 @@ write_script() {
 
   python3 - <<'PY' "$CANDIDATES_FILE" "$sys_prompt_file" "$user_prompt_file" "$NEWS_COUNT" "$SCRIPT_TARGET_CHARS" "$PROGRAM_NAME" "$style_name" "$taiwan_count" "$world_count" "$script_tone" "${FEATURE_TOPIC:-}" "${STOCK_DATA_FILE:-}"
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -189,47 +188,50 @@ user_payload = {
 
 sys_prompt_file.write_text(system_prompt, encoding="utf-8")
 user_prompt_file.write_text(json.dumps(user_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-request_file = Path(sys.argv[2]).parent / f"{program_name}_write_script_request.json"
-payload = {
-    "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
-    "temperature": 0.3,
-    "messages": [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}
-    ]
-}
-request_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 PY
 
-  local deepseek_model="${DEEPSEEK_MODEL:-deepseek-chat}"
-  local deepseek_timeout="${DEEPSEEK_WRITE_TIMEOUT:-120}"
-  local request_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_request.json"
+  local codex_model="${CODEX_WRITE_MODEL:-gpt-5.5}"
+  local codex_timeout="${CODEX_WRITE_TIMEOUT:-180}"
+  local combined_prompt_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_combined.txt"
 
-  log INFO "step=write_script calling deepseek model=$deepseek_model"
+  {
+    printf '你的整個回覆必須是一個合法的 JSON 物件，以 { 開始，以 } 結束。不得有任何說明、分析或 markdown。\n\n'
+    printf '<INSTRUCTIONS>\n'
+    cat "$sys_prompt_file"
+    printf '\n</INSTRUCTIONS>\n\n<DATA>\n'
+    cat "$user_prompt_file"
+    printf '\n</DATA>\n\n'
+    printf '只輸出 JSON，不要任何其他文字。\n'
+  } > "$combined_prompt_file"
 
-  local http_code
-  http_code="$(curl -sS \
-    -o "$response_file" \
-    -w "%{http_code}" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-    --max-time "$deepseek_timeout" \
-    -d @"$request_file" \
-    "$DEEPSEEK_API_URL" || true)"
+  log INFO "step=write_script calling codex model=$codex_model"
 
-  if ! [[ "$http_code" =~ ^[0-9]{3}$ ]]; then
-    http_code="000"
+  local _codex_bin="${CODEX_BIN:-}"
+  if [[ -z "$_codex_bin" ]]; then
+    _codex_bin="$(command -v codex 2>/dev/null || echo "")"
+  fi
+  if [[ -z "$_codex_bin" && -x "$HOME/.npm-global/bin/codex" ]]; then
+    _codex_bin="$HOME/.npm-global/bin/codex"
+  fi
+  if [[ -z "$_codex_bin" ]]; then
+    die "codex CLI not found (set CODEX_BIN in .env or install: npm i -g @openai/codex)"
   fi
 
-  if [[ "$http_code" != "200" ]]; then
-    log ERROR "step=write_script failed http_code=$http_code timeout=${deepseek_timeout}s"
-    die "deepseek write_script failed (http $http_code)"
+  local codex_exit=0
+  timeout "$codex_timeout" "$_codex_bin" exec \
+      --model "$codex_model" \
+      -o "$response_file" \
+      - < "$combined_prompt_file" \
+      > /dev/null 2>&1 || codex_exit=$?
+
+  if [[ $codex_exit -ne 0 ]]; then
+    log ERROR "step=write_script failed codex exit_code=$codex_exit timeout=${codex_timeout}s"
+    die "codex write_script failed"
   fi
 
   if [[ ! -s "$response_file" ]]; then
-    log ERROR "step=write_script deepseek returned empty response"
-    die "deepseek write_script empty response"
+    log ERROR "step=write_script codex returned empty response"
+    die "codex write_script empty response"
   fi
 
   python3 - <<'PY' "$response_file" "$SELECTED_FILE" "$SCRIPT_FILE"
@@ -242,8 +244,7 @@ response_file = Path(sys.argv[1])
 selected_file = Path(sys.argv[2])
 script_file = Path(sys.argv[3])
 
-data = json.loads(response_file.read_text(encoding="utf-8"))
-content = data["choices"][0]["message"]["content"].strip()
+content = response_file.read_text(encoding="utf-8").strip()
 
 match = re.search(r"```json\s*(\{.*\})\s*```", content, re.S)
 if match:
@@ -337,5 +338,5 @@ PY
     log WARN "step=write_script script_too_short chars=$script_chars target=$target_chars min_threshold=$min_chars"
   fi
 
-  log INFO "step=write_script done model=$deepseek_model script_chars=$script_chars target=$target_chars selected_file=$SELECTED_FILE selected_size_bytes=$selected_size script_file=$SCRIPT_FILE script_size_bytes=$script_size"
+  log INFO "step=write_script done model=$codex_model script_chars=$script_chars target=$target_chars selected_file=$SELECTED_FILE selected_size_bytes=$selected_size script_file=$SCRIPT_FILE script_size_bytes=$script_size"
 }
