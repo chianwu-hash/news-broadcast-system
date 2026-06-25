@@ -218,14 +218,17 @@ PY
   fi
 
   local codex_exit=0
+  local codex_stderr_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_codex_stderr.txt"
   timeout "$codex_timeout" "$_codex_bin" exec \
       --model "$codex_model" \
       -o "$response_file" \
       - < "$combined_prompt_file" \
-      > /dev/null 2>&1 || codex_exit=$?
+      > /dev/null 2>"$codex_stderr_file" || codex_exit=$?
 
   if [[ $codex_exit -ne 0 ]]; then
-    log ERROR "step=write_script failed codex exit_code=$codex_exit timeout=${codex_timeout}s"
+    local _stderr_head
+    _stderr_head="$(head -c 500 "$codex_stderr_file" 2>/dev/null | tr '\n' ' ')"
+    log ERROR "step=write_script failed codex exit_code=$codex_exit timeout=${codex_timeout}s stderr=$_stderr_head"
     die "codex write_script failed"
   fi
 
