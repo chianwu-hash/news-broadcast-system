@@ -221,6 +221,7 @@ PY
   local codex_stderr_file="$COMMON_TMP_DIR/${PROGRAM_NAME}_write_script_codex_stderr.txt"
   timeout "$codex_timeout" "$_codex_bin" exec \
       --model "$codex_model" \
+      --skip-git-repo-check \
       -o "$response_file" \
       - < "$combined_prompt_file" \
       > /dev/null 2>"$codex_stderr_file" || codex_exit=$?
