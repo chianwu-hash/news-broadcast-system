@@ -139,25 +139,25 @@ get_search_queries() {
     morning-news)
       cat <<EOF
 Taiwan news today
-Taiwan politics economy latest
-US stock market Wall Street overnight
-S&P 500 Nasdaq Dow Jones closing
+Taiwan politics latest
 Taiwan society latest news
-中華職棒 昨日賽事比分
-CPBL 2026 baseball game results scores
+US stock market Wall Street overnight closing
+S&P 500 Nasdaq Dow Jones results
+CPBL baseball game results scores today
+CPBL 2026 Chinese Professional Baseball League scores
 Asia Pacific news today
-international breaking news
+international breaking news today
 EOF
       ;;
     evening-news)
       cat <<EOF
 Taiwan news today
-Taiwan stock market TWSE closing today
-TSMC 台積電 stock news today
+Taiwan stock market TAIEX TWSE closing today
+TSMC stock price news today
 Taiwan government politics latest
 Taiwan business technology news
-MLB results today 2026 Dodgers Ohtani
-MLB scores highlights 2026
+MLB Dodgers Ohtani game results scores today
+MLB scores highlights results today 2026
 Asia breaking news today
 world news today
 EOF

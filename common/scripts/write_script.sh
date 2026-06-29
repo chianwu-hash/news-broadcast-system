@@ -77,6 +77,7 @@ candidates = candidates_data.get("candidates", [])
 
 # 股市資料（晚安新聞專用）
 stock_context = ""
+market_open_today = False
 if program_name == "evening-news" and stock_data_file:
     from pathlib import Path as _Path
     _sf = _Path(stock_data_file)
@@ -84,18 +85,21 @@ if program_name == "evening-news" and stock_data_file:
         try:
             stock = json.loads(_sf.read_text(encoding="utf-8"))
             if stock.get("market_open"):
+                market_open_today = True
                 twii = stock["twii"]
                 tsmc = stock["tsmc"]
                 volatile_note = ""
                 if stock.get("is_volatile"):
                     volatile_note = f"（大盤漲跌幅達 {abs(twii['change_pct']):.2f}%，屬劇烈震盪，請在播報後加一段簡短市場分析，約五十到八十字）"
                 stock_context = f"""
-18. 今日股市資料（必須納入播報，置於各則新聞之後）：
+23. 今日股市資料（必須納入播報，置於各則新聞之後）：
     - 台股加權指數：{twii['index']:,.2f} 點，{twii['direction']} {abs(twii['change']):.2f} 點（{twii['change_pct']:+.2f}%）{volatile_note}
     - 台積電（二三三零）：收盤價 {tsmc['price']:,.0f} 元，{tsmc['direction']} {abs(tsmc['change']):.0f} 元（{tsmc['change_pct']:+.2f}%）
     - 股市數字同樣以中文口語化書寫（如 33400 點 -> 三萬三千四百點）"""
         except Exception:
             pass
+if program_name == "evening-news" and not market_open_today:
+    stock_context = "\n23. 今天台股休市（假日），不需要播報台股收盤數據。請用其他台灣財經、產業或科技新聞取代股市播報。"
 
 topic_rule = ""
 if program_name == "feature-news" and feature_topic:
@@ -135,7 +139,7 @@ system_prompt = f"""你是台灣繁體中文 Podcast 新聞編輯與口播稿撰
 5. 其中台灣新聞約 {taiwan_count} 則，國際新聞約 {world_count} 則。
 6. 避免重複主題，特別是同一國際事件不要選太多相近角度。
 7. {selection_priority}
-8. 財經股市新聞（category = economy）：{"早安新聞報美股（NYSE 凌晨收盤結果）、華爾街動態、國際財經。台股留給晚安新聞，早安不報台股。" if program_name == "morning-news" else "晚安新聞報台股收盤、台積電、台灣財經。美股留給早安新聞，晚安不報美股。" if program_name == "evening-news" else "如有財經新聞可適量選入。"}必須選入至少1則財經新聞。
+8. 財經股市新聞（category = economy）：{"早安新聞報美股（NYSE 凌晨收盤結果）、華爾街動態、國際財經。台股留給晚安新聞，早安不報台股。週末美股休市時，改報國際財經或產業新聞。" if program_name == "morning-news" else ("晚安新聞報台股收盤、台積電、台灣財經。美股留給早安新聞，晚安不報美股。" if market_open_today else "今天台股休市，改報台灣產業、科技或國際財經新聞，不要硬找台股收盤數據。") if program_name == "evening-news" else "如有財經新聞可適量選入。"}必須選入至少1則財經新聞。
 9. 體育新聞（category = sports）：{"早安新聞報 CPBL 中華職棒（昨晚台灣賽事結果），如有 CPBL 新聞必須選入至少2則。早安不報 MLB，MLB 留給晚安新聞。" if program_name == "morning-news" else "晚安新聞報 MLB 美國職棒（美國昨晚賽事結果），特別關注道奇隊與大谷翔平，如有 MLB 新聞必須選入至少1則。晚安不報 CPBL，CPBL 留給早安新聞。" if program_name == "evening-news" else "如有體育新聞可適量選入。"}所有體育新聞必須是近期（3天內）的比賽結果、球員動態，不接受舊聞或花絮。
 10. 盡量避免把評論、投書、過度獵奇、過於八卦的內容列入最終稿。同一家公司或同一個主題最多選 2 則，避免過度集中。
 11. 播報稿長度目標約 {script_target_chars} 字。
