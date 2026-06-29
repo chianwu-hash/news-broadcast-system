@@ -143,8 +143,8 @@ Taiwan politics latest
 Taiwan society latest news
 US stock market Wall Street overnight closing
 S&P 500 Nasdaq Dow Jones results
-CPBL baseball game results scores today
-CPBL 2026 Chinese Professional Baseball League scores
+中華職棒 昨日賽事比分結果
+CPBL 2026 baseball game results scores
 Asia Pacific news today
 international breaking news today
 EOF
@@ -152,11 +152,11 @@ EOF
     evening-news)
       cat <<EOF
 Taiwan news today
-Taiwan stock market TAIEX TWSE closing today
-TSMC stock price news today
+台股 加權指數 收盤
+台積電 最新消息
 Taiwan government politics latest
 Taiwan business technology news
-MLB Dodgers Ohtani game results scores today
+MLB Dodgers Ohtani 大谷翔平 道奇 比分
 MLB scores highlights results today 2026
 Asia breaking news today
 world news today
@@ -319,6 +319,7 @@ search_news() {
   local query
   local idx=0
   local _brave_failed=0
+  local _brave_fail_count=0
 
   while IFS= read -r query; do
     [[ -z "$query" ]] && continue
@@ -357,9 +358,14 @@ search_news() {
     fi
 
     if [[ "$http_code" != "200" ]]; then
-      log WARN "step=search_news query_$idx failed http_code=$http_code (will try fallback)"
-      _brave_failed=1
-      break
+      log WARN "step=search_news query_$idx failed http_code=$http_code (skipping)"
+      _brave_fail_count=$((_brave_fail_count + 1))
+      if [[ $_brave_fail_count -ge 3 ]]; then
+        log WARN "step=search_news brave failed ${_brave_fail_count} queries, fallback to tavily"
+        _brave_failed=1
+        break
+      fi
+      continue
     fi
 
     python3 - <<'PY' "$response_file" "$query" "$idx" >> "$TMP_JSONL"
